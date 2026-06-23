@@ -1,0 +1,15 @@
+{
+  "name": "barricade-and-infinite-ttt",
+  "version": "1.0.0",
+  "description": "Barricade (Quoridor) + Infinite Tic Tac Toe with PvP and PvE, Node.js + Socket.io + Docker",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/run-tests.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

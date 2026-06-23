@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Barricade &amp; Infinite Tic Tac Toe</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- ================= MENU ================= -->
+    <section id="menu" class="screen active">
+      <h1>Game Arcade</h1>
+      <p class="sub">Pick a game, then choose your mode.</p>
+
+      <div class="cards">
+        <button class="game-card" data-game="barricade">
+          <span class="emoji">🧱</span>
+          <span class="title">Barricade</span>
+          <span class="desc">Quoridor-style. Race across the board while walling off your rival.</span>
+        </button>
+        <button class="game-card" data-game="ttt">
+          <span class="emoji">♾️</span>
+          <span class="title">Infinite Tic&nbsp;Tac&nbsp;Toe</span>
+          <span class="desc">3-piece limit. Your oldest mark vanishes — no more draws.</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= MODE SELECT ================= -->
+    <section id="mode" class="screen">
+      <button class="back" data-back="menu">← Back</button>
+      <h2 id="mode-title">Choose mode</h2>
+
+      <div class="mode-grid">
+        <button class="mode-btn" data-mode="pve">
+          <span class="emoji">🤖</span><span>Player vs Computer</span>
+        </button>
+        <button class="mode-btn" data-mode="pvp-create">
+          <span class="emoji">🧑‍🤝‍🧑</span><span>Create Online Room</span>
+        </button>
+        <button class="mode-btn" data-mode="pvp-join">
+          <span class="emoji">🔗</span><span>Join with Code</span>
+        </button>
+      </div>
+
+      <div id="difficulty-wrap" class="diff-wrap">
+        <label>Computer difficulty</label>
+        <div class="seg">
+          <button class="seg-btn active" data-diff="easy">Easy</button>
+          <button class="seg-btn" data-diff="hard">Hard</button>
+        </div>
+      </div>
+
+      <div id="join-wrap" class="join-wrap hidden">
+        <input id="join-code" maxlength="4" placeholder="CODE" autocomplete="off" />
+        <button id="join-go">Join</button>
+      </div>
+    </section>
+
+    <!-- ================= GAME ================= -->
+    <section id="game" class="screen">
+      <div class="topbar">
+        <button class="back" data-back="quit">← Quit</button>
+        <div id="status" class="status">…</div>
+        <button id="rematch" class="rematch hidden">Rematch</button>
+      </div>
+
+      <div id="room-banner" class="room-banner hidden"></div>
+
+      <!-- Barricade controls -->
+      <div id="bar-controls" class="bar-controls hidden">
+        <div class="seg">
+          <button class="seg-btn active" data-tool="move">Move pawn</button>
+          <button class="seg-btn" data-tool="wall">Place wall</button>
+        </div>
+        <div id="orient-seg" class="seg hidden">
+          <button class="seg-btn active" data-orient="h">↔ Horizontal</button>
+          <button class="seg-btn" data-orient="v">↕ Vertical</button>
+        </div>
+      </div>
+
+      <div id="board-wrap" class="board-wrap"></div>
+
+      <div id="overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <h2 id="overlay-title">Result</h2>
+          <p id="overlay-text"></p>
+          <div class="overlay-actions">
+            <button id="overlay-rematch">Play again</button>
+            <button id="overlay-menu" class="ghost">Main menu</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/barricade.js"></script>
+  <script src="js/tictactoe.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

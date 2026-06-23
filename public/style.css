@@ -1,0 +1,139 @@
+:root {
+  --bg: #0f1220;
+  --panel: #1a1f35;
+  --panel-2: #232a47;
+  --ink: #eef1ff;
+  --muted: #9aa3c7;
+  --accent: #6c8cff;
+  --p1: #ff5d73;   /* player 1 / X */
+  --p2: #34d1bf;   /* player 2 / O */
+  --wall: #f6c453;
+  --gap: clamp(4px, 1.4vw, 11px);
+  --radius: 16px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: radial-gradient(1200px 800px at 50% -10%, #1d2444, var(--bg));
+  color: var(--ink);
+  display: flex; justify-content: center;
+  padding: env(safe-area-inset-top) 12px 24px;
+}
+#app { width: 100%; max-width: 640px; }
+
+.screen { display: none; flex-direction: column; align-items: center; gap: 16px; padding-top: 18px; }
+.screen.active { display: flex; }
+
+h1 { font-size: clamp(28px, 7vw, 44px); margin: 8px 0 0; letter-spacing: .5px; }
+h2 { font-size: clamp(20px, 5vw, 28px); margin: 4px 0; }
+.sub { color: var(--muted); margin: 0 0 8px; text-align: center; }
+
+/* ---- menu cards ---- */
+.cards { display: grid; grid-template-columns: 1fr; gap: 14px; width: 100%; }
+@media (min-width: 520px) { .cards { grid-template-columns: 1fr 1fr; } }
+.game-card {
+  display: flex; flex-direction: column; gap: 8px; text-align: left;
+  background: linear-gradient(160deg, var(--panel-2), var(--panel));
+  border: 1px solid #2c3358; border-radius: var(--radius);
+  padding: 20px; color: var(--ink); cursor: pointer; transition: transform .12s, border-color .12s;
+}
+.game-card:hover { transform: translateY(-3px); border-color: var(--accent); }
+.game-card .emoji { font-size: 34px; }
+.game-card .title { font-size: 20px; font-weight: 700; }
+.game-card .desc { color: var(--muted); font-size: 14px; }
+
+/* ---- mode select ---- */
+.mode-grid { display: grid; gap: 12px; width: 100%; }
+.mode-btn {
+  display: flex; align-items: center; gap: 12px; justify-content: flex-start;
+  background: var(--panel); border: 1px solid #2c3358; border-radius: 14px;
+  padding: 16px 18px; color: var(--ink); font-size: 17px; cursor: pointer;
+}
+.mode-btn:hover { border-color: var(--accent); }
+.mode-btn .emoji { font-size: 26px; }
+
+.diff-wrap, .join-wrap { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.diff-wrap label { color: var(--muted); font-size: 14px; }
+.join-wrap { flex-direction: row; }
+#join-code {
+  flex: 1; text-transform: uppercase; letter-spacing: 6px; text-align: center;
+  font-size: 24px; padding: 12px; border-radius: 12px; border: 1px solid #2c3358;
+  background: var(--panel); color: var(--ink);
+}
+#join-go, #join-go:hover { background: var(--accent); border: none; color: white;
+  padding: 0 22px; border-radius: 12px; font-size: 16px; cursor: pointer; }
+
+.seg { display: inline-flex; background: var(--panel); border: 1px solid #2c3358; border-radius: 12px; overflow: hidden; }
+.seg-btn { background: transparent; color: var(--muted); border: none; padding: 10px 16px; cursor: pointer; font-size: 15px; }
+.seg-btn.active { background: var(--accent); color: white; }
+
+.back { align-self: flex-start; background: transparent; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 4px 0; }
+
+/* ---- game ---- */
+.topbar { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.status { flex: 1; text-align: center; font-weight: 600; font-size: clamp(14px,4vw,18px); }
+.rematch { background: var(--accent); color: white; border: none; padding: 8px 14px; border-radius: 10px; cursor: pointer; }
+
+.room-banner {
+  width: 100%; text-align: center; background: var(--panel); border: 1px dashed #3a4275;
+  border-radius: 12px; padding: 10px; color: var(--muted);
+}
+.room-banner b { color: var(--wall); letter-spacing: 4px; font-size: 22px; }
+
+.bar-controls { width: 100%; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+
+.board-wrap { width: 100%; display: flex; justify-content: center; }
+
+/* ===== Tic Tac Toe board ===== */
+.ttt-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  width: min(86vw, 380px); aspect-ratio: 1; }
+.ttt-cell {
+  background: var(--panel); border: 1px solid #2c3358; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(40px, 14vw, 86px); font-weight: 800; cursor: pointer; user-select: none;
+  transition: background .1s;
+}
+.ttt-cell:hover { background: var(--panel-2); }
+.ttt-cell.p1 { color: var(--p1); }
+.ttt-cell.p2 { color: var(--p2); }
+.ttt-cell.oldest { animation: blink 1s ease-in-out infinite; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .28; } }
+
+/* ===== Barricade board ===== */
+.bar-board {
+  display: grid; width: min(92vw, 560px); aspect-ratio: 1;
+  background: #11152b; border-radius: 14px; padding: 8px; gap: 0;
+}
+.bar-cell {
+  background: var(--panel); border-radius: 6px; position: relative; cursor: default;
+  display: flex; align-items: center; justify-content: center;
+}
+.bar-cell.legal { outline: 3px solid rgba(108,140,255,.6); cursor: pointer; background: var(--panel-2); }
+.bar-cell.legal::after { content: ''; width: 26%; height: 26%; border-radius: 50%; background: rgba(108,140,255,.45); }
+.pawn { width: 70%; height: 70%; border-radius: 50%; box-shadow: inset 0 -4px 8px rgba(0,0,0,.35); }
+.pawn.p1 { background: var(--p1); }
+.pawn.p2 { background: var(--p2); }
+
+.slot { background: transparent; border-radius: 4px; z-index: 2; }
+.slot.active { cursor: pointer; }
+.slot.active:hover { background: rgba(246,196,83,.35); }
+.slot.filled { background: var(--wall); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+
+/* ---- overlay ---- */
+.overlay { position: fixed; inset: 0; background: rgba(6,8,18,.74); display: flex;
+  align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+.overlay-card { background: var(--panel); border: 1px solid #2c3358; border-radius: 18px;
+  padding: 26px; text-align: center; max-width: 360px; width: 100%; }
+.overlay-actions { display: flex; gap: 10px; margin-top: 18px; }
+.overlay-actions button { flex: 1; padding: 12px; border-radius: 12px; border: none;
+  background: var(--accent); color: white; font-size: 16px; cursor: pointer; }
+.overlay-actions .ghost { background: transparent; border: 1px solid #3a4275; color: var(--ink); }
+
+.toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: #2a2140; color: #ffd9a8; border: 1px solid #5a4a2a; padding: 12px 18px;
+  border-radius: 12px; opacity: 0; pointer-events: none; transition: all .25s; z-index: 60; max-width: 90vw; text-align: center; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.hidden { display: none !important; }
