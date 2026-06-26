@@ -5,6 +5,11 @@ const { InfiniteTTT } = require('../game/infiniteTTT');
 const { chooseTTTMove } = require('../game/tttAI');
 const { chooseQuoridorMove } = require('../game/quoridorAI');
 const { Island } = require('../game/island');
+const { Connect4 } = require('../game/connect4');
+const { chooseConnect4Move } = require('../game/connect4AI');
+const { Reversi } = require('../game/reversi');
+const { chooseReversiMove } = require('../game/reversiAI');
+const { Trivia } = require('../game/trivia');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -327,6 +332,206 @@ test('full random game always terminates with exactly one winner', () => {
     assert.strictEqual(g.aliveCount(), 1, 'exactly one survivor');
     assert.ok(g.winnerId, 'winner set');
   }
+});
+
+console.log('\n=== Connect 4 ===');
+
+test('drops fall to the bottom of a column', () => {
+  const g = new Connect4();
+  g.applyMove(1, { col: 3 });
+  // bottom row is row 5 → index 5*7+3 = 38
+  assert.strictEqual(g.board[38], 1);
+  g.applyMove(2, { col: 3 });
+  assert.strictEqual(g.board[31], 2); // stacks on top (row 4)
+});
+
+test('rejects wrong turn and full columns', () => {
+  const g = new Connect4();
+  assert.strictEqual(g.applyMove(2, { col: 0 }).ok, false); // P1 to move
+  for (let i = 0; i < 6; i++) g.applyMove(g.turn, { col: 0 });
+  assert.strictEqual(g.applyMove(g.turn, { col: 0 }).ok, false); // column full
+});
+
+test('vertical four wins', () => {
+  const g = new Connect4();
+  g.applyMove(1, 0); g.applyMove(2, 1);
+  g.applyMove(1, 0); g.applyMove(2, 1);
+  g.applyMove(1, 0); g.applyMove(2, 1);
+  const r = g.applyMove(1, 0);
+  assert.ok(r.ok);
+  assert.strictEqual(g.winner, 1);
+  assert.strictEqual(g.winLine.length, 4);
+});
+
+test('horizontal four wins', () => {
+  const g = new Connect4();
+  g.applyMove(1, 0); g.applyMove(2, 0);
+  g.applyMove(1, 1); g.applyMove(2, 1);
+  g.applyMove(1, 2); g.applyMove(2, 2);
+  const r = g.applyMove(1, 3);
+  assert.ok(r.ok);
+  assert.strictEqual(g.winner, 1);
+});
+
+test('AI takes an immediate winning drop', () => {
+  const g = new Connect4();
+  // P2 has three stacked in column 5; AI (player 2) should complete it.
+  g.board[g.idx(5, 5)] = 2; g.board[g.idx(4, 5)] = 2; g.board[g.idx(3, 5)] = 2;
+  g.turn = 2;
+  assert.strictEqual(chooseConnect4Move(g, 2, 'hard'), 5);
+});
+
+test('AI blocks an immediate loss', () => {
+  const g = new Connect4();
+  // P1 threatens a vertical four in column 2; AI must block at column 2.
+  g.board[g.idx(5, 2)] = 1; g.board[g.idx(4, 2)] = 1; g.board[g.idx(3, 2)] = 1;
+  g.turn = 2;
+  assert.strictEqual(chooseConnect4Move(g, 2, 'hard'), 2);
+});
+
+test('full Connect4 AI vs AI terminates', () => {
+  const g = new Connect4();
+  let safety = 0;
+  while (!g.winner && safety++ < 100) {
+    const c = chooseConnect4Move(g, g.turn, 'easy');
+    const r = g.applyMove(g.turn, c);
+    assert.ok(r.ok, 'legal AI drop');
+  }
+  assert.ok(g.winner, 'reached a terminal state');
+});
+
+console.log('\n=== Reversi ===');
+
+test('opening position has four discs and four legal moves', () => {
+  const g = new Reversi();
+  assert.deepStrictEqual(g.counts(), { 1: 2, 2: 2 });
+  assert.strictEqual(g.legalMoves(1).length, 4);
+});
+
+test('a legal move flips the outflanked disc', () => {
+  const g = new Reversi();
+  // P1 at (2,3) flips the light disc at (3,3)
+  const r = g.applyMove(1, { r: 2, c: 3 });
+  assert.ok(r.ok, r.error);
+  assert.strictEqual(g.board[g.idx(3, 3)], 1); // flipped to dark
+  assert.strictEqual(g.turn, 2);
+});
+
+test('illegal (non-flanking) move is rejected', () => {
+  const g = new Reversi();
+  assert.strictEqual(g.applyMove(1, { r: 0, c: 0 }).ok, false);
+});
+
+test('forced pass keeps the turn when opponent has no move', () => {
+  const g = new Reversi();
+  // craft a position where after P1 moves, P2 has no legal move.
+  g.board = Array(64).fill(null);
+  g.board[g.idx(0, 0)] = 1;
+  g.board[g.idx(0, 1)] = 2;
+  g.board[g.idx(0, 2)] = null; // P1 plays here, flipping (0,1)
+  g.turn = 1;
+  const r = g.applyMove(1, { r: 0, c: 2 });
+  assert.ok(r.ok, r.error);
+  // P2 now has only dark discs on the board → no move → turn returns to P1 or ends
+  assert.ok(g.turn === 1 || g.winner, 'pass handled');
+});
+
+test('Reversi AI always returns a legal move; full game terminates', () => {
+  const g = new Reversi();
+  let safety = 0;
+  while (!g.winner && safety++ < 200) {
+    const mv = chooseReversiMove(g, g.turn, safety % 2 ? 'easy' : 'hard');
+    assert.ok(mv && Number.isInteger(mv.cell), 'AI produced a cell');
+    const r = g.applyMove(g.turn, mv);
+    assert.ok(r.ok, 'legal AI move: ' + (r.error || ''));
+  }
+  assert.ok(g.winner, 'reached a terminal state');
+  const c = g.counts();
+  assert.strictEqual(c[1] + c[2] <= 64, true, 'disc counts are sane');
+});
+
+console.log('\n=== Trivia Royale ===');
+
+const FAKE_Q = [
+  { category: 'X', text: 'Q1', options: ['a', 'b', 'c', 'd'], answer: 0 },
+  { category: 'X', text: 'Q2', options: ['a', 'b', 'c', 'd'], answer: 1 },
+  { category: 'X', text: 'Q3', options: ['a', 'b', 'c', 'd'], answer: 2 },
+];
+
+function triviaWith(n, rounds) {
+  const g = new Trivia({ rounds });
+  for (let i = 1; i <= n; i++) g.addPlayer('p' + i, 'P' + i);
+  return g;
+}
+
+test('needs 2 players (host + someone) to start', () => {
+  const g = triviaWith(1, 3);
+  assert.strictEqual(g.canStart(), false);
+  g.addPlayer('b', 'Bot', { isBot: true });
+  assert.strictEqual(g.canStart(), true);
+  assert.ok(g.start(FAKE_Q).ok);
+  assert.strictEqual(g.phase, 'question');
+  assert.strictEqual(g.round, 1);
+});
+
+test('correct answers score, faster earns more, wrong scores zero', () => {
+  const g = triviaWith(2, 3); g.start(FAKE_Q); // Q1 answer index 0
+  g.answer('p1', 0, g.questionStart + 500);     // fast + correct
+  g.answer('p2', 0, g.questionStart + 15000);   // slow + correct
+  const res = g.reveal();
+  const r1 = res.find((r) => r.id === 'p1');
+  const r2 = res.find((r) => r.id === 'p2');
+  assert.ok(r1.correct && r2.correct);
+  assert.ok(r1.gain > r2.gain, 'faster answer earns more');
+  assert.strictEqual(g.phase, 'reveal');
+});
+
+test('wrong answer earns nothing and breaks the streak', () => {
+  const g = triviaWith(2, 3); g.start(FAKE_Q);
+  g.answer('p1', 3, g.questionStart + 100); // wrong (answer is 0)
+  const res = g.reveal();
+  assert.strictEqual(res.find((r) => r.id === 'p1').gain, 0);
+});
+
+test('cannot answer twice or out of phase', () => {
+  const g = triviaWith(2, 3); g.start(FAKE_Q);
+  assert.ok(g.answer('p1', 0, Date.now()).ok);
+  assert.strictEqual(g.answer('p1', 1, Date.now()).ok, false);
+  g.reveal();
+  assert.strictEqual(g.answer('p2', 0, Date.now()).ok, false); // reveal phase
+});
+
+test('advances through rounds and ends with a winner', () => {
+  const g = triviaWith(2, 3); g.start(FAKE_Q);
+  for (let round = 0; round < 3; round++) {
+    g.answer('p1', g.current.answer, g.questionStart + 200); // always correct & fast
+    g.answer('p2', 3, g.questionStart + 9000);               // usually wrong
+    g.reveal();
+    const next = g.advanceAfterReveal();
+    if (round < 2) assert.strictEqual(next, 'question');
+    else assert.strictEqual(next, 'final');
+  }
+  assert.strictEqual(g.phase, 'final');
+  assert.strictEqual(g.standings()[0].id, 'p1', 'fast/correct player wins');
+});
+
+test('serialize hides the answer until reveal', () => {
+  const g = triviaWith(2, 3); g.start(FAKE_Q);
+  assert.strictEqual(g.serialize('p1').question.answer, null);
+  g.answer('p1', 0, Date.now()); g.answer('p2', 1, Date.now());
+  g.reveal();
+  assert.strictEqual(g.serialize('p1').question.answer, 0);
+});
+
+test('bots answer and let the round resolve', () => {
+  const g = new Trivia({ rounds: 3 });
+  g.addPlayer('h', 'Human');
+  g.addPlayer('b1', 'Bot1', { isBot: true });
+  g.addPlayer('b2', 'Bot2', { isBot: true });
+  g.start(FAKE_Q);
+  g.answer('h', 0, Date.now());
+  g.botAnswer('b1', 1); g.botAnswer('b2', 1); // accuracy 1 → always correct
+  assert.ok(g.allAnswered());
 });
 
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===\n`);

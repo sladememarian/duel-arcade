@@ -1,23 +1,56 @@
 // server.js — Express + Socket.io. Server is the single source of truth.
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
+
+// Minimal .env loader (no dependency): populate process.env from ./.env if present.
+try {
+  for (const line of fs.readFileSync(path.join(__dirname, '.env'), 'utf8').split('\n')) {
+    const m = line.match(/^\s*([\w.-]+)\s*=\s*(.*)\s*$/);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+  }
+} catch (_) { /* no .env — fine */ }
+
 const express = require('express');
 const { Server } = require('socket.io');
 
 const { Quoridor } = require('./game/quoridor');
 const { InfiniteTTT } = require('./game/infiniteTTT');
+const { Connect4 } = require('./game/connect4');
+const { Reversi } = require('./game/reversi');
 const { chooseQuoridorMove } = require('./game/quoridorAI');
 const { chooseTTTMove } = require('./game/tttAI');
+const { chooseConnect4Move } = require('./game/connect4AI');
+const { chooseReversiMove } = require('./game/reversiAI');
 const { Island, DURATIONS } = require('./game/island');
+const { Trivia, DURATIONS: TRIVIA_DUR } = require('./game/trivia');
+const db = require('./db');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, db: db.status }));
+
+// ---- leaderboard API (fails soft when the DB is offline) ----
+app.get('/api/leaderboard', async (req, res) => {
+  const game = String(req.query.game || '');
+  const limit = parseInt(req.query.limit, 10) || 10;
+  res.json({ ok: true, online: db.isOnline(), scores: await db.topScores(game, limit) });
+});
+app.post('/api/score', async (req, res) => {
+  const { game, name, score, meta } = req.body || {};
+  if (!db.SCORED_GAMES.has(game)) return res.status(400).json({ ok: false, error: 'unknown game' });
+  const r = await db.saveScore({ game, name, score, meta });
+  res.json(r);
+});
 
 const PORT = process.env.PORT || 3000;
+
+// Two-player games that use the shared PvE/PvP room system.
+const TWO_PLAYER = new Set(['barricade', 'ttt', 'connect4', 'reversi']);
 
 // ---- room registry ----
 // rooms[code] = {
@@ -34,7 +67,13 @@ function makeCode() {
 }
 
 function newEngine(game) {
-  return game === 'barricade' ? new Quoridor() : new InfiniteTTT();
+  switch (game) {
+    case 'barricade': return new Quoridor();
+    case 'connect4': return new Connect4();
+    case 'reversi': return new Reversi();
+    case 'ttt':
+    default: return new InfiniteTTT();
+  }
 }
 
 function broadcastState(code) {
@@ -43,26 +82,36 @@ function broadcastState(code) {
   io.to(code).emit('state', { code, state: room.engine.serialize(), mode: room.mode });
 }
 
+// Pick the AI's action for one move. Returns an action the engine accepts.
+function aiAction(game, eng, diff) {
+  switch (game) {
+    case 'barricade': return chooseQuoridorMove(eng, 2, diff || 'hard');
+    case 'ttt': return chooseTTTMove(eng, 2);          // a cell index
+    case 'connect4': return chooseConnect4Move(eng, 2, diff || 'hard');
+    case 'reversi': return chooseReversiMove(eng, 2, diff || 'hard');
+    default: return null;
+  }
+}
+
 // Drive the AI when it's the AI's turn (PvE). AI is always player 2.
+// Reversi can hand the turn straight back to the AI (opponent forced to pass),
+// so we loop until it's no longer the AI's move.
 function maybeAIMove(code) {
   const room = rooms[code];
   if (!room || room.mode !== 'pve') return;
-  const eng = room.engine;
-  if (eng.winner || eng.turn !== 2) return;
+  if (room.engine.winner || room.engine.turn !== 2) return;
   setTimeout(() => {
     const r = rooms[code];
     if (!r || r.engine.winner || r.engine.turn !== 2) return;
-    const eng2 = r.engine;
-    let res;
-    if (r.game === 'barricade') {
-      const action = chooseQuoridorMove(eng2, 2, r.aiDifficulty || 'hard');
-      res = action ? eng2.applyMove(2, action) : { ok: false };
-    } else {
-      const cell = chooseTTTMove(eng2, 2);
-      res = eng2.applyMove(2, cell);
+    const eng = r.engine;
+    let guard = 0;
+    while (!eng.winner && eng.turn === 2 && guard++ < 80) {
+      const action = aiAction(r.game, eng, r.aiDifficulty);
+      const res = action != null ? eng.applyMove(2, action) : { ok: false };
+      if (!res.ok) break;
+      if (r.game !== 'reversi') break; // only reversi can chain on a forced pass
     }
     broadcastState(code);
-    // TTT/Barricade AI never chains (turn flips to human), so no recursion needed.
   }, 450); // small "thinking" delay
 }
 
@@ -234,13 +283,94 @@ function scheduleBotReply(code, botId, humanId) {
   room.botTimers.push(t);
 }
 
+// ===================================================================
+// TRIVIA ROYALE — multiplayer quiz race (1+ humans, bots fill in).
+// Room shape: { game:'trivia', engine:Trivia, timer, botTimers[], phaseEndsAt }.
+// ===================================================================
+function broadcastTrivia(code) {
+  const room = rooms[code];
+  if (!room || room.game !== 'trivia') return;
+  const eng = room.engine;
+  for (const p of eng.players) {
+    if (p.isBot || !p.connected) continue;
+    io.to(p.id).emit('triviaState', {
+      code,
+      state: eng.serialize(p.id),
+      phaseEndsAt: room.phaseEndsAt || null,
+      durations: TRIVIA_DUR,
+    });
+  }
+}
+
+function triviaStartQuestion(code) {
+  const room = rooms[code];
+  if (!room || room.engine.phase !== 'question') return;
+  clearBotTimers(code);
+  broadcastTrivia(code);
+  scheduleBotAnswers(code);
+  setTriviaTimer(code, TRIVIA_DUR.question, () => triviaReveal(code));
+}
+
+function triviaReveal(code) {
+  const room = rooms[code];
+  if (!room || room.engine.phase !== 'question') return;
+  clearIslandTimer(code); // reuses generic room.timer
+  clearBotTimers(code);
+  room.engine.reveal();
+  broadcastTrivia(code);
+  setTriviaTimer(code, TRIVIA_DUR.reveal, () => triviaAfterReveal(code));
+}
+
+function triviaAfterReveal(code) {
+  const room = rooms[code];
+  if (!room || room.engine.phase !== 'reveal') return;
+  const next = room.engine.advanceAfterReveal();
+  if (next === 'final') {
+    clearIslandTimer(code);
+    broadcastTrivia(code);
+    persistTriviaScores(room.engine);
+  } else {
+    triviaStartQuestion(code);
+  }
+}
+
+function setTriviaTimer(code, seconds, fn) {
+  // identical mechanics to the island timer; reuse the same room fields
+  setIslandTimer(code, seconds, fn);
+}
+
+function scheduleBotAnswers(code) {
+  const room = rooms[code];
+  if (!room) return;
+  const eng = room.engine;
+  for (const bot of eng.players.filter((p) => p.isBot)) {
+    const accuracy = bot._acc || (bot._acc = 0.5 + Math.random() * 0.4); // 50–90%
+    const delay = 1500 + Math.random() * TRIVIA_DUR.question * 700;
+    const t = setTimeout(() => {
+      if (eng.phase !== 'question') return;
+      eng.botAnswer(bot.id, accuracy);
+      broadcastTrivia(code);
+      if (eng.allAnswered()) triviaReveal(code);
+    }, delay);
+    room.botTimers.push(t);
+  }
+}
+
+async function persistTriviaScores(eng) {
+  if (!db.isOnline()) return;
+  for (const p of eng.players) {
+    if (p.isBot || p.score <= 0) continue;
+    db.saveScore({ game: 'trivia', name: p.name, score: p.score, meta: { rounds: eng.totalRounds } });
+  }
+}
+
 io.on('connection', (socket) => {
   socket.data.room = null;
   socket.data.seat = null;
 
   // ---- PvE: create a solo room vs the computer ----
   socket.on('createPvE', ({ game, difficulty }) => {
-    if (game !== 'barricade' && game !== 'ttt') return;
+    if (!TWO_PLAYER.has(game)) return;
     const code = makeCode();
     rooms[code] = {
       game, mode: 'pve',
@@ -257,7 +387,7 @@ io.on('connection', (socket) => {
 
   // ---- PvP: host creates a room and waits for a friend ----
   socket.on('createPvP', ({ game }) => {
-    if (game !== 'barricade' && game !== 'ttt') return;
+    if (!TWO_PLAYER.has(game)) return;
     const code = makeCode();
     rooms[code] = {
       game, mode: 'pvp',
@@ -295,10 +425,11 @@ io.on('connection', (socket) => {
       return socket.emit('errorMsg', 'Waiting for an opponent to join.');
     }
     let res;
-    if (room.game === 'barricade') {
-      res = room.engine.applyMove(seat, action);
-    } else {
+    if (room.game === 'ttt') {
       res = room.engine.applyMove(seat, action.cell);
+    } else {
+      // barricade / connect4 / reversi all take the action object directly
+      res = room.engine.applyMove(seat, action);
     }
     if (!res.ok) return socket.emit('errorMsg', res.error || 'Illegal move.');
     broadcastState(code);
@@ -437,6 +568,86 @@ io.on('connection', (socket) => {
     broadcastIsland(code);
   });
 
+  // ================= TRIVIA HANDLERS =================
+  socket.on('createTrivia', ({ name, rounds }) => {
+    if (socket.data.room) cleanup(socket);
+    const code = makeCode();
+    rooms[code] = { game: 'trivia', engine: new Trivia({ rounds }), timer: null, botTimers: [], phaseEndsAt: null, botSeq: 0 };
+    rooms[code].engine.addPlayer(socket.id, name);
+    socket.join(code);
+    socket.data.room = code; socket.data.seat = null;
+    socket.emit('triviaJoined', { code, youId: socket.id });
+    broadcastTrivia(code);
+  });
+
+  socket.on('joinTrivia', ({ code, name }) => {
+    code = (code || '').toUpperCase().trim();
+    const room = rooms[code];
+    if (!room || room.game !== 'trivia') return socket.emit('errorMsg', 'Trivia room not found.');
+    if (room.engine.phase !== 'lobby') return socket.emit('errorMsg', 'That game has already started.');
+    if (room.engine.players.length >= 12) return socket.emit('errorMsg', 'Room is full.');
+    if (socket.data.room && socket.data.room !== code) cleanup(socket);
+    room.engine.addPlayer(socket.id, name);
+    socket.join(code);
+    socket.data.room = code; socket.data.seat = null;
+    socket.emit('triviaJoined', { code, youId: socket.id });
+    broadcastTrivia(code);
+  });
+
+  socket.on('triviaAddBot', () => {
+    const code = socket.data.room; const room = rooms[code];
+    if (!room || room.game !== 'trivia') return;
+    const eng = room.engine;
+    if (eng.hostId !== socket.id || eng.phase !== 'lobby' || eng.players.length >= 12) return;
+    const id = `BOT_${code}_${room.botSeq++}`;
+    const name = BOT_NAMES[(room.botSeq - 1) % BOT_NAMES.length];
+    eng.addPlayer(id, name, { isBot: true });
+    broadcastTrivia(code);
+  });
+
+  socket.on('triviaSetRounds', ({ rounds }) => {
+    const code = socket.data.room; const room = rooms[code];
+    if (!room || room.game !== 'trivia') return;
+    if (room.engine.hostId !== socket.id) return;
+    room.engine.setRounds(rounds);
+    broadcastTrivia(code);
+  });
+
+  socket.on('triviaStart', () => {
+    const code = socket.data.room; const room = rooms[code];
+    if (!room || room.game !== 'trivia') return;
+    const eng = room.engine;
+    if (eng.hostId !== socket.id) return;
+    const r = eng.start();
+    if (!r.ok) return socket.emit('errorMsg', r.error);
+    triviaStartQuestion(code);
+  });
+
+  socket.on('triviaAnswer', ({ choice }) => {
+    const code = socket.data.room; const room = rooms[code];
+    if (!room || room.game !== 'trivia') return;
+    const eng = room.engine;
+    const r = eng.answer(socket.id, choice, Date.now());
+    if (!r.ok) return; // ignore late/dupe answers silently
+    broadcastTrivia(code);
+    if (eng.allAnswered()) triviaReveal(code);
+  });
+
+  socket.on('triviaPlayAgain', () => {
+    const code = socket.data.room; const room = rooms[code];
+    if (!room || room.game !== 'trivia') return;
+    const old = room.engine;
+    if (old.hostId !== socket.id) return;
+    clearIslandTimer(code); clearBotTimers(code);
+    const ne = new Trivia({ rounds: old.totalRounds });
+    for (const p of old.players) {
+      if (p.connected) ne.addPlayer(p.id, p.name, { isBot: p.isBot });
+    }
+    if (old.hostId && ne.player(old.hostId)) ne.hostId = old.hostId;
+    room.engine = ne;
+    broadcastTrivia(code);
+  });
+
   socket.on('leaveRoom', () => cleanup(socket));
   socket.on('disconnect', () => cleanup(socket));
 });
@@ -465,6 +676,23 @@ function cleanup(socket) {
     return;
   }
 
+  // ---- trivia rooms ----
+  if (room.game === 'trivia') {
+    const eng = room.engine;
+    eng.removePlayer(socket.id);
+    socket.leave(code);
+    socket.data.room = null; socket.data.seat = null;
+    const humans = eng.players.filter((p) => !p.isBot && p.connected);
+    if (humans.length === 0) {
+      clearIslandTimer(code); clearBotTimers(code);
+      delete rooms[code];
+      return;
+    }
+    if (eng.phase === 'question' && eng.allAnswered()) triviaReveal(code);
+    else broadcastTrivia(code);
+    return;
+  }
+
   // notify the other seat
   socket.to(code).emit('opponentLeft', { code });
   // free the seat
@@ -478,4 +706,6 @@ function cleanup(socket) {
   if (humans.length === 0) delete rooms[code];
 }
 
-server.listen(PORT, () => console.log(`Games server listening on :${PORT}`));
+db.initDb().finally(() => {
+  server.listen(PORT, () => console.log(`Games server listening on :${PORT}`));
+});

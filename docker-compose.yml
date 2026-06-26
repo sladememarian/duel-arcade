@@ -7,4 +7,7 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
+      # Leaderboards (optional). If unset/unreachable the app still runs.
+      - MONGO_URL=${MONGO_URL:-mongodb://admin:s7FMPOH6nP7cadoBhhql@remote-pishgaman.runflare.com:31048/admin?authSource=admin}
+      - MONGO_DB=${MONGO_DB:-arcade}
     restart: unless-stopped

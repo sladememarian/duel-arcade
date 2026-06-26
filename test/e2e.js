@@ -83,8 +83,41 @@ async function main() {
     log(/not found/i.test(e2), 'joining unknown room returns error');
     c.disconnect();
 
+    // ---------- Connect 4 PvE ----------
+    const c4 = connect();
+    c4.emit('createPvE', { game: 'connect4', difficulty: 'hard' });
+    const c4j = await once(c4, 'joined');
+    log(c4j.game === 'connect4' && c4j.seat === 1, 'Connect4 PvE room created');
+    let c4s = (await once(c4, 'state')).state;
+    log(c4s.type === 'connect4' && c4s.turn === 1, 'Connect4 initial state, P1 to move');
+    c4.emit('move', { col: 3 });
+    // our drop, then the AI's reply
+    const c4after = (await once(c4, 'state')).state;
+    log(c4after.board[5 * 7 + 3] === 1, 'Connect4 human drop landed at bottom of column');
+    const c4ai = (await once(c4, 'state')).state;
+    log(c4ai.turn === 1 && c4ai.board.filter((x) => x === 2).length === 1, 'Connect4 AI replied');
+    c4.disconnect();
+    await wait(150);
+
+    // ---------- Reversi PvE ----------
+    const rv = connect();
+    rv.emit('createPvE', { game: 'reversi', difficulty: 'hard' });
+    const rvj = await once(rv, 'joined');
+    log(rvj.game === 'reversi', 'Reversi PvE room created');
+    const rvs = (await once(rv, 'state')).state;
+    log(rvs.type === 'reversi' && rvs.legal.length === 4, 'Reversi initial state has 4 legal moves');
+    rv.emit('move', { cell: rvs.legal[0] });
+    const rvAfter = (await once(rv, 'state')).state; // our move
+    const rvAi = (await once(rv, 'state')).state;    // AI move
+    log(rvAi.counts[1] + rvAi.counts[2] >= 6, 'Reversi AI responded (discs increased)');
+    rv.disconnect();
+    await wait(150);
+
     // ---------- ISLAND: full game flow ----------
     await runIsland();
+
+    // ---------- TRIVIA: full game flow ----------
+    await runTrivia();
 
   } catch (e) {
     console.log('  FATAL ' + e.message); failed++;
@@ -175,6 +208,59 @@ async function runIsland() {
   log(ended.winnerId === id2, 'ghost vote decided final survivor (G2 wins)');
 
   g1.disconnect(); g2.disconnect(); g3.disconnect();
+  await wait(150);
+}
+
+// --- trivia state tracking (separate event from island) ---
+function trackT(sock) { sock._t = null; sock.on('triviaState', (m) => { sock._t = m.state; }); }
+function waitT(sock, pred, timeout = 12000) {
+  return new Promise((res, rej) => {
+    if (sock._t && pred(sock._t)) return res(sock._t);
+    const to = setTimeout(() => { sock.off('triviaState', h); rej(new Error('timeout waiting for trivia state')); }, timeout);
+    function h(m) { if (pred(m.state)) { clearTimeout(to); sock.off('triviaState', h); res(m.state); } }
+    sock.on('triviaState', h);
+  });
+}
+
+async function runTrivia() {
+  const t1 = connect(), t2 = connect();
+  trackT(t1); trackT(t2);
+  t1.emit('createTrivia', { name: 'T1', rounds: 3 });
+  const j1 = await once(t1, 'triviaJoined');
+  const id1 = j1.youId, code = j1.code;
+  log(!!code, 'trivia room created');
+  t2.emit('joinTrivia', { code, name: 'T2' });
+  const id2 = (await once(t2, 'triviaJoined')).youId;
+
+  await waitT(t1, (s) => s.players.length === 2 && s.phase === 'lobby');
+  log(true, 'trivia lobby gathered 2 players');
+
+  t1.emit('triviaStart');
+  await waitT(t1, (s) => s.phase === 'question' && s.round === 1);
+  log(true, 'trivia started → first question');
+
+  // privacy: during 'question' the correct answer must be hidden
+  log(t1._t.question.answer === null, 'correct answer hidden during question');
+
+  // play through all rounds
+  let guard = 0;
+  while (guard++ < 25) {
+    const s = t1._t;
+    if (s.phase === 'final') break;
+    if (s.phase === 'question') {
+      const round = s.round;
+      t1.emit('triviaAnswer', { choice: 0 });
+      t2.emit('triviaAnswer', { choice: 1 });
+      await waitT(t1, (st) => st.phase !== 'question' || st.round !== round);
+    } else { // reveal → wait for next question or the final
+      await waitT(t1, (st) => st.phase === 'question' || st.phase === 'final');
+    }
+  }
+  log(t1._t.phase === 'final', 'trivia reached the final after all rounds');
+  const fin = t1._t;
+  log(fin.winner && (fin.winner.id === id1 || fin.winner.id === id2), 'trivia crowned a winner');
+
+  t1.disconnect(); t2.disconnect();
   await wait(150);
 }
 

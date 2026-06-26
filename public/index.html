@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Game Arcade — Barricade · Tic Tac Toe · Island</title>
+  <title>Game Arcade — 8 mini-games</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -29,6 +29,31 @@
           <span class="emoji">🏝️</span>
           <span class="title">Island</span>
           <span class="desc">3+ players, stranded. Whisper, scheme, and vote each other out until one survives.</span>
+        </button>
+        <button class="game-card" data-game="connect4">
+          <span class="emoji">🔴</span>
+          <span class="title">Connect 4</span>
+          <span class="desc">Drop discs and line up four in a row. Play a friend or a sharp AI.</span>
+        </button>
+        <button class="game-card" data-game="reversi">
+          <span class="emoji">⚫</span>
+          <span class="title">Reversi</span>
+          <span class="desc">Othello rules. Outflank to flip discs and own the board.</span>
+        </button>
+        <button class="game-card" data-game="g2048">
+          <span class="emoji">🔢</span>
+          <span class="title">2048</span>
+          <span class="desc">Solo. Swipe to merge tiles and chase the elusive 2048.</span>
+        </button>
+        <button class="game-card" data-game="memory">
+          <span class="emoji">🧠</span>
+          <span class="title">Memory Match</span>
+          <span class="desc">Solo. Flip cards, find every pair in the fewest moves.</span>
+        </button>
+        <button class="game-card" data-game="trivia">
+          <span class="emoji">❓</span>
+          <span class="title">Trivia Royale</span>
+          <span class="desc">3+ players race to answer fastest. Speed = points. Bots can fill in.</span>
         </button>
       </div>
     </section>
@@ -140,14 +165,117 @@
       <div id="island-dock" class="island-dock"></div>
     </section>
 
+    <!-- ================= 2048 ================= -->
+    <section id="g2048-screen" class="screen">
+      <div class="topbar">
+        <button class="back g2048-back">← Back</button>
+        <div class="status">2048</div>
+        <button class="rematch" id="g2048-new">New</button>
+      </div>
+      <div class="g2048-scores">
+        <div class="score-box"><span class="lbl">Score</span><span id="g2048-score">0</span></div>
+        <div class="score-box"><span class="lbl">Best</span><span id="g2048-best">0</span></div>
+      </div>
+      <div id="g2048-board" class="g2048-board"></div>
+      <p class="sub g2048-hint">Use arrow keys or swipe. Merge equal tiles!</p>
+      <div id="g2048-lb" class="leaderboard"></div>
+      <div id="g2048-overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <h2 id="g2048-result-title">Game Over</h2>
+          <p id="g2048-result-text"></p>
+          <div id="g2048-save" class="lb-save"></div>
+          <div class="overlay-actions">
+            <button id="g2048-again">Play again</button>
+            <button id="g2048-menu" class="ghost">Main menu</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= MEMORY MATCH ================= -->
+    <section id="memory-screen" class="screen">
+      <div class="topbar">
+        <button class="back memory-back">← Back</button>
+        <div class="status">Memory Match</div>
+        <button class="rematch" id="memory-new">New</button>
+      </div>
+      <div class="memory-bar">
+        <div class="score-box"><span class="lbl">Moves</span><span id="memory-moves">0</span></div>
+        <div class="score-box"><span class="lbl">Time</span><span id="memory-time">0:00</span></div>
+        <div class="score-box"><span class="lbl">Pairs</span><span id="memory-pairs">0</span></div>
+      </div>
+      <div class="memory-diff seg" id="memory-diff">
+        <button class="seg-btn active" data-size="4">Easy 4×4</button>
+        <button class="seg-btn" data-size="6">Hard 6×6</button>
+      </div>
+      <div id="memory-board" class="memory-board"></div>
+      <div id="memory-lb" class="leaderboard"></div>
+      <div id="memory-overlay" class="overlay hidden">
+        <div class="overlay-card">
+          <h2>You did it! 🎉</h2>
+          <p id="memory-result-text"></p>
+          <div id="memory-save" class="lb-save"></div>
+          <div class="overlay-actions">
+            <button id="memory-again">Play again</button>
+            <button id="memory-menu" class="ghost">Main menu</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TRIVIA: SETUP ================= -->
+    <section id="trivia-setup" class="screen">
+      <button class="back trivia-tomenu">← Back</button>
+      <h1 class="trivia-title">❓ Trivia Royale</h1>
+      <p class="sub">Answer fast. Faster = more points.</p>
+      <div class="island-setup">
+        <label>Your name</label>
+        <input id="trivia-name" maxlength="16" placeholder="Enter your name" autocomplete="off" />
+        <button id="trivia-create" class="primary-btn">Create Room</button>
+        <div class="island-or"><span>or join a friend</span></div>
+        <div class="island-join-row">
+          <input id="trivia-join-code" maxlength="4" placeholder="CODE" autocomplete="off" />
+          <button id="trivia-join">Join</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TRIVIA: LOBBY ================= -->
+    <section id="trivia-lobby" class="screen">
+      <button class="back trivia-leave">← Leave</button>
+      <h2>Lobby</h2>
+      <div id="trivia-lobby-banner" class="room-banner"></div>
+      <div id="trivia-rounds" class="trivia-rounds"></div>
+      <div id="trivia-lobby-players" class="island-grid"></div>
+      <div id="trivia-lobby-controls" class="island-lobby-controls"></div>
+      <p id="trivia-lobby-hint" class="sub"></p>
+    </section>
+
+    <!-- ================= TRIVIA: GAME ================= -->
+    <section id="trivia-game" class="screen">
+      <div class="topbar">
+        <button class="back trivia-leave">← Leave</button>
+        <div id="trivia-progress" class="status">…</div>
+        <div id="trivia-answered" class="island-night"></div>
+      </div>
+      <div id="trivia-timerbar" class="island-timerbar"><span></span></div>
+      <div id="trivia-stage" class="trivia-stage"></div>
+    </section>
+
   </div>
 
   <div id="toast" class="toast"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="js/leaderboard.js"></script>
   <script src="js/barricade.js"></script>
   <script src="js/tictactoe.js"></script>
+  <script src="js/connect4.js"></script>
+  <script src="js/reversi.js"></script>
   <script src="js/island.js"></script>
+  <script src="js/trivia.js"></script>
+  <script src="js/g2048.js"></script>
+  <script src="js/memory.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
