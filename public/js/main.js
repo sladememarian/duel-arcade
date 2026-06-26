@@ -25,9 +25,18 @@
     clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2600);
   }
 
+  // ---------- ISLAND (multiplayer social game) ----------
+  if (window.IslandClient) {
+    window.IslandClient.init(socket, { show, toast });
+  }
+
   // ---------- MENU ----------
   document.querySelectorAll('.game-card').forEach((card) => {
     card.addEventListener('click', () => {
+      if (card.dataset.game === 'island') {
+        if (window.IslandClient) window.IslandClient.open();
+        return;
+      }
       ui.game = card.dataset.game;
       $('#mode-title').textContent = (ui.game === 'barricade' ? 'Barricade' : 'Infinite Tic Tac Toe') + ' — choose mode';
       $('#join-wrap').classList.add('hidden');

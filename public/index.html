@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Barricade &amp; Infinite Tic Tac Toe</title>
+  <title>Game Arcade — Barricade · Tic Tac Toe · Island</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -24,6 +24,11 @@
           <span class="emoji">♾️</span>
           <span class="title">Infinite Tic&nbsp;Tac&nbsp;Toe</span>
           <span class="desc">3-piece limit. Your oldest mark vanishes — no more draws.</span>
+        </button>
+        <button class="game-card" data-game="island">
+          <span class="emoji">🏝️</span>
+          <span class="title">Island</span>
+          <span class="desc">3+ players, stranded. Whisper, scheme, and vote each other out until one survives.</span>
         </button>
       </div>
     </section>
@@ -95,6 +100,46 @@
       </div>
     </section>
 
+    <!-- ================= ISLAND: SETUP ================= -->
+    <section id="island-setup" class="screen">
+      <button class="back island-tomenu">← Back</button>
+      <h1 class="island-title">🏝️ Island</h1>
+      <p class="sub">Whisper. Scheme. Survive the night.</p>
+      <div class="island-setup">
+        <label>Your name</label>
+        <input id="island-name" maxlength="16" placeholder="Enter your name" autocomplete="off" />
+        <button id="island-create" class="primary-btn">Create Room</button>
+        <div class="island-or"><span>or join a friend</span></div>
+        <div class="island-join-row">
+          <input id="island-join-code" maxlength="4" placeholder="CODE" autocomplete="off" />
+          <button id="island-join">Join</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ISLAND: LOBBY ================= -->
+    <section id="island-lobby" class="screen">
+      <button class="back island-leave">← Leave</button>
+      <h2>Lobby</h2>
+      <div id="island-lobby-banner" class="room-banner"></div>
+      <div id="island-lobby-players" class="island-grid"></div>
+      <div id="island-lobby-controls" class="island-lobby-controls"></div>
+      <p id="island-lobby-hint" class="sub"></p>
+    </section>
+
+    <!-- ================= ISLAND: GAME ================= -->
+    <section id="island-game" class="screen">
+      <div class="topbar">
+        <button class="back island-leave">← Leave</button>
+        <div id="island-phase" class="status">…</div>
+        <div id="island-night" class="island-night"></div>
+      </div>
+      <div id="island-timerbar" class="island-timerbar"><span></span></div>
+      <div id="island-stage" class="island-stage"></div>
+      <div id="island-action" class="island-action"></div>
+      <div id="island-dock" class="island-dock"></div>
+    </section>
+
   </div>
 
   <div id="toast" class="toast"></div>
@@ -102,6 +147,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/barricade.js"></script>
   <script src="js/tictactoe.js"></script>
+  <script src="js/island.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

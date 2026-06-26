@@ -4,6 +4,7 @@ const { Quoridor } = require('../game/quoridor');
 const { InfiniteTTT } = require('../game/infiniteTTT');
 const { chooseTTTMove } = require('../game/tttAI');
 const { chooseQuoridorMove } = require('../game/quoridorAI');
+const { Island } = require('../game/island');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -173,6 +174,159 @@ test('full AI vs AI Quoridor game terminates with a winner', () => {
     safety++;
   }
   assert.ok(g.winner, 'a winner emerged within bound');
+});
+
+console.log('\n=== Island ===');
+
+function islandWith(n) {
+  const g = new Island();
+  for (let i = 1; i <= n; i++) g.addPlayer('p' + i, 'P' + i);
+  return g;
+}
+
+test('needs >= 3 players to start', () => {
+  const g = islandWith(2);
+  assert.strictEqual(g.canStart(), false);
+  assert.strictEqual(g.start().ok, false);
+  g.addPlayer('p3', 'P3');
+  assert.strictEqual(g.canStart(), true);
+  assert.ok(g.start().ok);
+  assert.strictEqual(g.phase, 'discussion');
+  assert.strictEqual(g.night, 1);
+});
+
+test('first player becomes host; host reassigns on leave', () => {
+  const g = islandWith(3);
+  assert.strictEqual(g.hostId, 'p1');
+  g.removePlayer('p1'); // lobby -> fully removed
+  assert.strictEqual(g.hostId, 'p2');
+  assert.strictEqual(g.players.length, 2);
+});
+
+test('cannot join after start; cannot vote outside voting', () => {
+  const g = islandWith(3); g.start();
+  assert.strictEqual(g.addPlayer('late', 'Late'), null);
+  assert.strictEqual(g.vote('p1', 'p2').ok, false); // still discussion
+});
+
+test('majority vote eliminates that player', () => {
+  const g = islandWith(4); g.start(); g.beginVoting();
+  g.vote('p1', 'p3'); g.vote('p2', 'p3'); g.vote('p4', 'p3'); g.vote('p3', 'p1');
+  const r = g.tally();
+  assert.strictEqual(r.eliminatedId, 'p3');
+  assert.strictEqual(g.player('p3').alive, false);
+  assert.strictEqual(g.player('p3').ghost, true);
+  assert.strictEqual(g.phase, 'reveal');
+});
+
+test('a tie eliminates no one (night skipped)', () => {
+  const g = islandWith(4); g.start(); g.beginVoting();
+  g.vote('p1', 'p2'); g.vote('p2', 'p1'); g.vote('p3', 'p4'); g.vote('p4', 'p3');
+  const r = g.tally();
+  assert.strictEqual(r.tie, true);
+  assert.strictEqual(r.eliminatedId, null);
+  assert.strictEqual(g.aliveCount(), 4);
+});
+
+test('cannot vote yourself or a dead player', () => {
+  const g = islandWith(3); g.start(); g.beginVoting();
+  assert.strictEqual(g.vote('p1', 'p1').ok, false);
+  g.player('p2').alive = false; g.player('p2').ghost = true;
+  assert.strictEqual(g.vote('p1', 'p2').ok, false);
+});
+
+test('reveal advances to ghostVote at 2 alive, else next night', () => {
+  const g = islandWith(4); g.start();
+  // kill p4 -> 3 alive -> next night
+  g.beginVoting();
+  g.vote('p1', 'p4'); g.vote('p2', 'p4'); g.vote('p3', 'p4'); g.vote('p4', 'p1');
+  g.tally();
+  assert.strictEqual(g.advanceAfterReveal(), 'discussion');
+  assert.strictEqual(g.night, 2);
+  // kill p3 -> 2 alive -> ghostVote
+  g.beginVoting();
+  g.vote('p1', 'p3'); g.vote('p2', 'p3'); g.vote('p3', 'p1');
+  g.tally();
+  assert.strictEqual(g.advanceAfterReveal(), 'ghostVote');
+});
+
+test('ghost vote kills a living player and crowns a winner', () => {
+  const g = islandWith(3); g.start();
+  // night 1: kill p3 -> 2 alive (p1,p2), p3 is ghost
+  g.beginVoting();
+  g.vote('p1', 'p3'); g.vote('p2', 'p3'); g.vote('p3', 'p1');
+  g.tally();
+  assert.strictEqual(g.advanceAfterReveal(), 'ghostVote');
+  // ghost p3 votes to kill p1 -> p2 wins
+  assert.ok(g.ghostVote('p3', 'p1').ok);
+  assert.strictEqual(g.vote('p3', 'p1').ok, false); // alive-vote path is closed
+  const r = g.tallyGhost();
+  assert.strictEqual(r.loserId, 'p1');
+  assert.strictEqual(g.winnerId, 'p2');
+  assert.strictEqual(g.phase, 'ended');
+});
+
+test('ghost vote with no votes still produces a winner (random victim)', () => {
+  const g = islandWith(3); g.start();
+  g.beginVoting();
+  g.vote('p1', 'p3'); g.vote('p2', 'p3'); g.vote('p3', 'p1');
+  g.tally(); g.advanceAfterReveal();
+  const r = g.tallyGhost(); // no ghost votes cast
+  assert.ok(r.winnerId, 'a winner emerged');
+  assert.strictEqual(g.aliveCount(), 1);
+});
+
+test('serialize hides who-voted-for and only reveals tally on reveal', () => {
+  const g = islandWith(3); g.start(); g.beginVoting();
+  g.vote('p1', 'p2');
+  const sVoting = g.serialize('p3');
+  assert.strictEqual(sVoting.lastResult, null, 'no tally during voting');
+  const p1view = sVoting.players.find((p) => p.id === 'p1');
+  assert.strictEqual(p1view.hasVoted, true);
+  assert.ok(!('votedFor' in p1view), 'never leaks vote target');
+  g.vote('p2', 'p3'); g.vote('p3', 'p2');
+  g.tally();
+  assert.ok(g.serialize('p3').lastResult, 'tally exposed on reveal');
+});
+
+test('disconnect mid-game keeps the seat but marks offline; counts as voted', () => {
+  const g = islandWith(3); g.start(); g.beginVoting();
+  g.removePlayer('p3'); // mid-game
+  assert.strictEqual(g.player('p3').connected, false);
+  assert.strictEqual(g.players.length, 3);
+  g.vote('p1', 'p2'); g.vote('p2', 'p1');
+  assert.strictEqual(g.allAliveVoted(), true, 'offline player does not block resolution');
+});
+
+test('full random game always terminates with exactly one winner', () => {
+  for (let trial = 0; trial < 50; trial++) {
+    const n = 3 + (trial % 5); // 3..7 players
+    const g = islandWith(n);
+    g.start();
+    let safety = 0;
+    while (g.phase !== 'ended' && safety < 500) {
+      safety++;
+      if (g.phase === 'discussion') { g.beginVoting(); continue; }
+      if (g.phase === 'voting') {
+        for (const p of g.alivePlayers()) {
+          const targets = g.alivePlayers().filter((x) => x.id !== p.id);
+          g.vote(p.id, targets[Math.floor(Math.random() * targets.length)].id);
+        }
+        g.tally(); continue;
+      }
+      if (g.phase === 'reveal') { g.advanceAfterReveal(); continue; }
+      if (g.phase === 'ghostVote') {
+        for (const p of g.ghostPlayers()) {
+          const targets = g.alivePlayers();
+          if (targets.length) g.ghostVote(p.id, targets[Math.floor(Math.random() * targets.length)].id);
+        }
+        g.tallyGhost(); continue;
+      }
+    }
+    assert.strictEqual(g.phase, 'ended', 'game ended');
+    assert.strictEqual(g.aliveCount(), 1, 'exactly one survivor');
+    assert.ok(g.winnerId, 'winner set');
+  }
 });
 
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===\n`);

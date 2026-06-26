@@ -6,10 +6,12 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/run-tests.js"
+    "test": "node test/run-tests.js",
+    "test:e2e": "node test/e2e.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+    "express": "^4.22.2",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   }
 }
