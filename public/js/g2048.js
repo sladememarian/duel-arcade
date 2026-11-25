@@ -1,51 +1,50 @@
-// public/js/g2048.js — 2048 (solo). Self-contained: own screen, logic, input,
-// localStorage best-score, and online leaderboard submission.
+// public/js/g2048.js — 2048 (solo). Own screen, logic, input and local best.
+// On a finished run it saves the score and claims the solo prize once.
 (function () {
   const SIZE = 4;
   const G = {
-    helpers: null,
-    grid: [],          // SIZE*SIZE, 0 = empty
+    api: null,
+    grid: [],
     score: 0,
     best: 0,
     over: false,
     won: false,
+    claimed: false,
     submitted: false,
     keyHandler: null,
   };
 
   const $ = (s) => document.querySelector(s);
 
-  function init(helpers) { G.helpers = helpers; wire(); }
+  function init(api) {
+    G.api = api;
+    wire();
+  }
 
   function open() {
     G.best = parseInt(localStorage.getItem('g2048Best') || '0', 10) || 0;
-    showScreen('g2048-screen');
+    G.api.show('g2048-screen');
     newGame();
     refreshLeaderboard();
-  }
-
-  function showScreen(id) {
-    document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
   }
 
   function wire() {
     $('#g2048-new').addEventListener('click', newGame);
     $('#g2048-again').addEventListener('click', () => { hideOverlay(); newGame(); });
-    $('.g2048-back').addEventListener('click', leave);
+    document.querySelector('.g2048-back').addEventListener('click', leave);
     $('#g2048-menu').addEventListener('click', leave);
 
-    // keyboard
     G.keyHandler = (e) => {
       if (!$('#g2048-screen').classList.contains('active')) return;
-      const map = { ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D',
-                    a: 'L', d: 'R', w: 'U', s: 'D' };
+      const map = {
+        ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D',
+        a: 'L', d: 'R', w: 'U', s: 'D',
+      };
       const dir = map[e.key];
       if (dir) { e.preventDefault(); move(dir); }
     };
     document.addEventListener('keydown', G.keyHandler);
 
-    // touch swipe on the board
     const board = $('#g2048-board');
     let sx = 0, sy = 0;
     board.addEventListener('touchstart', (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
@@ -60,14 +59,14 @@
 
   function leave() {
     hideOverlay();
-    document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
-    document.getElementById('menu').classList.add('active');
+    G.api.show('menu');
   }
 
   function newGame() {
     G.grid = Array(SIZE * SIZE).fill(0);
-    G.score = 0; G.over = false; G.won = false; G.submitted = false;
+    G.score = 0; G.over = false; G.won = false; G.claimed = false; G.submitted = false;
     addRandom(); addRandom();
+    hideOverlay();
     render();
   }
 
@@ -79,7 +78,6 @@
     G.grid[i] = Math.random() < 0.9 ? 2 : 4;
   }
 
-  // Compress + merge one row (array of 4) toward the left. Returns { row, gained, moved }.
   function slideRow(row) {
     const nums = row.filter((v) => v !== 0);
     let gained = 0;
@@ -89,7 +87,7 @@
         const merged = nums[i] * 2;
         out.push(merged); gained += merged;
         if (merged === 2048) G.won = true;
-        i++; // skip the consumed tile
+        i++;
       } else {
         out.push(nums[i]);
       }
@@ -133,7 +131,6 @@
 
   function isGameOver() {
     if (G.grid.includes(0)) return false;
-    // any adjacent equal pair?
     for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
         const v = G.grid[r * SIZE + c];
@@ -165,16 +162,30 @@
 
   function endGame() {
     G.over = true;
-    $('#g2048-result-title').textContent = G.won ? 'You hit 2048! 🎉' : 'Game Over';
-    $('#g2048-result-text').textContent = `You scored ${G.score} points.`;
-    window.LB.buildSave($('#g2048-save'), 'g2048', G.score, {}, () => refreshLeaderboard());
+    $('#g2048-result-title').textContent = G.won ? 'You reached 2048' : 'Game over';
+    $('#g2048-result-text').textContent = `The run ends at ${G.score} points.`;
+    $('#g2048-save').textContent = 'Saving the run…';
     $('#g2048-overlay').classList.remove('hidden');
+    settle();
+  }
+
+  async function settle() {
+    if (!G.submitted) {
+      G.submitted = true;
+      G.api.submitScore('g2048', G.score, { won: G.won }).then(() => refreshLeaderboard());
+    }
+    if (G.claimed) return;
+    G.claimed = true;
+    const res = await G.api.completeSolo('g2048', G.score, { won: G.won });
+    if (res && res.ok) $('#g2048-save').textContent = `Prize credited · +${res.points} points.`;
+    else if (res && res.error) $('#g2048-save').textContent = res.error;
+    else $('#g2048-save').textContent = '';
   }
 
   function hideOverlay() { $('#g2048-overlay').classList.add('hidden'); }
 
   function refreshLeaderboard() {
-    window.LB.render($('#g2048-lb'), 'g2048', { format: (r) => `${r.score}` });
+    if (window.LB) window.LB.render($('#g2048-lb'), 'g2048', { format: (r) => `${r.score}` });
   }
 
   window.G2048 = { init, open };

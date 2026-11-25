@@ -1,21 +1,23 @@
-# Lightweight production image
-FROM node:18-alpine
+# Production image — small, non-root, healthchecked.
+FROM node:20-alpine
+
+ENV NODE_ENV=production \
+    PORT=3000
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
 COPY package*.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
-# Copy the rest of the app
 COPY . .
 
-ENV NODE_ENV=production
-ENV PORT=3000
+RUN addgroup -S arcade && adduser -S arcade -G arcade \
+    && chown -R arcade:arcade /app
+USER arcade
+
 EXPOSE 3000
 
-# Basic container healthcheck hits the /healthz endpoint
-HEALTHCHECK --interval=30s --timeout=4s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=4s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
 
 CMD ["node", "server.js"]

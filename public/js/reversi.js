@@ -28,12 +28,10 @@
   }
 
   function statusText(state, seat, mode) {
-    const meDisc = seat === 1 ? '⚫' : '⚪';
-    const oppDisc = seat === 1 ? '⚪' : '⚫';
-    const score = `${meDisc} ${state.counts[seat]} · ${oppDisc} ${state.counts[seat === 1 ? 2 : 1]}`;
+    const score = `Discs — you ${state.counts[seat]} · opponent ${state.counts[seat === 1 ? 2 : 1]}`;
     if (state.winner === 'draw') return `${score}  •  Draw!`;
     if (state.winner) {
-      return `${score}  •  ` + (state.winner === seat ? 'You win! 🎉'
+      return `${score}  •  ` + (state.winner === seat ? 'You win.'
         : (mode === 'pve' ? 'Computer wins.' : 'Opponent wins.'));
     }
     let turnTxt;
@@ -47,7 +45,7 @@
     const won = state.winner === seat;
     const my = state.counts[seat], op = state.counts[seat === 1 ? 2 : 1];
     return {
-      title: won ? 'Victory 🎉' : 'Defeat',
+      title: won ? 'Victory' : 'Defeat',
       text: `Final discs — you ${my}, ${mode === 'pve' ? 'computer' : 'opponent'} ${op}.`,
     };
   }

@@ -110,7 +110,7 @@
   function statusText(state, seat, mode) {
     const w1 = state.players[1].walls, w2 = state.players[2].walls;
     if (state.winner) {
-      const who = state.winner === seat ? 'You win! 🎉'
+      const who = state.winner === seat ? 'You win.'
         : (mode === 'pve' ? 'Computer wins.' : 'Opponent wins.');
       return who;
     }

@@ -1,13 +1,74 @@
+# Game Arcade — app + MongoDB, fully self-contained.
+# Secrets live in .env (see .env.example). Nothing is fetched from outside.
+name: game-arcade
+
 services:
+  mongo:
+    image: mongo:7
+    container_name: arcade-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-arcade}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?set MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-arcade}
+    command:
+      - --wiredTigerCacheSizeGB
+      - "0.25"
+    volumes:
+      - mongo-data:/data/db
+    expose:
+      - "27017"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet
+          --username "$${MONGO_INITDB_ROOT_USERNAME}"
+          --password "$${MONGO_INITDB_ROOT_PASSWORD}"
+          --authenticationDatabase admin
+          --eval "db.adminCommand('ping').ok"
+          | grep -q 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   games:
     build: .
     container_name: game-arcade
+    depends_on:
+      mongo:
+        condition: service_healthy
+    init: true
     ports:
       - "3000:3000"
     environment:
-      - PORT=3000
-      - NODE_ENV=production
-      # Leaderboards (optional). If unset/unreachable the app still runs.
-      - MONGO_URL=${MONGO_URL:-mongodb://admin:s7FMPOH6nP7cadoBhhql@remote-pishgaman.runflare.com:31048/admin?authSource=admin}
-      - MONGO_DB=${MONGO_DB:-arcade}
+      PORT: 3000
+      NODE_ENV: production
+      # The database is internal to the compose network — not read from a user-supplied URL.
+      MONGO_URL: mongodb://${MONGO_ROOT_USER:-arcade}:${MONGO_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      MONGO_DB: ${MONGO_DB:-arcade}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      MAX_USERS: ${MAX_USERS:-60}
+      # Set to true only when the app is served over HTTPS (behind a TLS proxy).
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      NODE_OPTIONS: --max-old-space-size=384
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    mem_limit: 768m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  mongo-data:

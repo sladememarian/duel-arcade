@@ -37,10 +37,10 @@
   }
 
   function statusText(state, seat, mode) {
-    const me = seat === 1 ? '🔴' : '🟡';
+    const me = seat === 1 ? 'red' : 'gold';
     if (state.winner === 'draw') return 'Draw — the board is full.';
     if (state.winner) {
-      return state.winner === seat ? 'You win! 🎉'
+      return state.winner === seat ? 'You win.'
         : (mode === 'pve' ? 'Computer wins.' : 'Opponent wins.');
     }
     const turnTxt = state.turn === seat ? 'Your turn'
@@ -52,7 +52,7 @@
     if (state.winner === 'draw') return { title: 'Draw', text: 'The board filled up with no four-in-a-row.' };
     const won = state.winner === seat;
     return {
-      title: won ? 'Victory 🎉' : 'Defeat',
+      title: won ? 'Victory' : 'Defeat',
       text: won ? 'Four in a row — nicely done!' : (mode === 'pve' ? 'The computer connected four.' : 'Your opponent connected four.'),
     };
   }

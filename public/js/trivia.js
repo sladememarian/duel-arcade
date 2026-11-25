@@ -1,7 +1,7 @@
-// public/js/trivia.js — Trivia Royale client (setup, lobby, live quiz, podium).
+// public/js/trivia.js — Trivia Royale client (lobby, live quiz, podium).
 (function () {
-  const OPTCOLORS = ['opt-red', 'opt-blue', 'opt-gold', 'opt-green'];
-  const OPTSHAPE = ['▲', '◆', '●', '■'];
+  const OPT_COLORS = ['opt-red', 'opt-blue', 'opt-gold', 'opt-green'];
+  const OPT_LETTERS = ['A', 'B', 'C', 'D'];
 
   const T = {
     socket: null,
@@ -12,58 +12,25 @@
     timerInt: null,
   };
   const $ = (s) => document.querySelector(s);
-
-  function showScreen(id) {
-    document.querySelectorAll('.screen').forEach((s) => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-  }
+  const PALETTE = ['#b23a22', '#3f6b4a', '#2f4f6f', '#a9791f', '#6b4a7a',
+    '#8a4b2f', '#2f6b63', '#7a3b55', '#4a5f7a', '#6f6a2f', '#8a3b3b', '#2f5f6f'];
 
   function init(socket, helpers) {
-    T.socket = socket; T.helpers = helpers;
-    wireSetup();
+    T.socket = socket;
+    T.helpers = helpers;
+    document.querySelectorAll('.trivia-leave').forEach((b) => b.addEventListener('click', leave));
     wireSocket();
   }
 
-  function open() {
-    $('#trivia-name').value = localStorage.getItem('arcadeName') || '';
-    $('#trivia-join-code').value = '';
-    showScreen('trivia-setup');
-    $('#trivia-name').focus();
-  }
-
   function reset() {
-    if (T.timerInt) { clearInterval(T.timerInt); T.timerInt = null; }
+    stopTimer();
     T.code = null; T.youId = null; T.state = null;
   }
 
   function leave() {
     T.socket.emit('leaveRoom');
     reset();
-    showScreen('menu');
-  }
-
-  function wireSetup() {
-    document.querySelectorAll('.trivia-tomenu').forEach((b) =>
-      b.addEventListener('click', () => { reset(); showScreen('menu'); }));
-    document.querySelectorAll('.trivia-leave').forEach((b) => b.addEventListener('click', leave));
-
-    $('#trivia-create').addEventListener('click', () => {
-      const name = $('#trivia-name').value.trim();
-      if (!name) return T.helpers.toast('Enter a name first.');
-      localStorage.setItem('arcadeName', name);
-      T.socket.emit('createTrivia', { name, rounds: 7 });
-    });
-    $('#trivia-join').addEventListener('click', doJoin);
-    $('#trivia-join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
-    $('#trivia-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#trivia-create').click(); });
-  }
-  function doJoin() {
-    const name = $('#trivia-name').value.trim();
-    const code = $('#trivia-join-code').value.trim().toUpperCase();
-    if (!name) return T.helpers.toast('Enter a name first.');
-    if (!code) return T.helpers.toast('Enter a room code.');
-    localStorage.setItem('arcadeName', name);
-    T.socket.emit('joinTrivia', { code, name });
+    T.helpers.show('menu');
   }
 
   function wireSocket() {
@@ -80,23 +47,22 @@
   }
 
   function onPhaseChange(from, to) {
-    if (to === 'question') T.helpers.toast('⚡ New question!');
-    if (to === 'final') T.helpers.toast('🏁 Final results!');
+    if (to === 'question') T.helpers.toast('New question.');
+    if (to === 'final') T.helpers.toast('Final results.');
   }
 
   function render() {
     if (!T.state) return;
-    if (T.state.phase === 'lobby') { renderLobby(); showScreen('trivia-lobby'); }
-    else { renderGame(); showScreen('trivia-game'); }
+    if (T.state.phase === 'lobby') { renderLobby(); T.helpers.show('trivia-lobby'); }
+    else { renderGame(); T.helpers.show('trivia-game'); }
   }
 
-  // ---------- lobby ----------
+  // ---------------- lobby ----------------
   function renderLobby() {
     const s = T.state;
     $('#trivia-lobby-banner').innerHTML =
-      `Room code: <b>${T.code}</b> &nbsp;·&nbsp; ${s.players.length} player${s.players.length === 1 ? '' : 's'}`;
+      `Room <b>${esc(T.code)}</b> · ${s.players.length} of 12 seats`;
 
-    // rounds control
     const rc = $('#trivia-rounds');
     rc.innerHTML = `<span class="rounds-label">Rounds: <b>${s.totalRounds}</b></span>`;
     if (s.isHost) {
@@ -104,7 +70,8 @@
       seg.className = 'seg';
       [5, 7, 10, 15].forEach((n) => {
         const b = document.createElement('button');
-        b.className = 'seg-btn' + (n === s.totalRounds ? ' active' : '');
+        b.type = 'button';
+        b.className = 'seg-btn' + (n === s.totalRounds ? ' is-active' : '');
         b.textContent = n;
         b.addEventListener('click', () => T.socket.emit('triviaSetRounds', { rounds: n }));
         seg.appendChild(b);
@@ -114,31 +81,31 @@
 
     const grid = $('#trivia-lobby-players');
     grid.innerHTML = '';
-    s.players.forEach((p) => grid.appendChild(playerChip(p)));
+    s.players.forEach((p) => grid.appendChild(playerCard(p)));
 
     const ctr = $('#trivia-lobby-controls');
     ctr.innerHTML = '';
     if (s.isHost) {
-      const addBot = mkBtn('🤖 Add Bot', 'ghost-btn', () => T.socket.emit('triviaAddBot'));
-      addBot.disabled = s.players.length >= 12;
-      const start = mkBtn('▶ Start Quiz', 'primary-btn', () => T.socket.emit('triviaStart'));
+      const add = mkBtn('Add a bot', 'btn btn-quiet', () => T.socket.emit('triviaAddBot'));
+      add.disabled = s.players.length >= 12;
+      const start = mkBtn('Start the quiz', 'btn btn-ink', () => T.socket.emit('triviaStart'));
       start.disabled = s.players.length < 2;
-      ctr.appendChild(addBot);
+      ctr.appendChild(add);
       ctr.appendChild(start);
     }
     $('#trivia-lobby-hint').textContent = s.isHost
-      ? (s.players.length < 2 ? 'Add a bot or invite a friend to begin.' : 'Ready when you are!')
+      ? (s.players.length < 2 ? 'Add a bot or invite a friend to begin.' : 'Ready when you are.')
       : 'Waiting for the host to start…';
   }
 
-  function playerChip(p) {
+  function playerCard(p) {
     const el = document.createElement('div');
     el.className = 'island-player' + (p.isMe ? ' me' : '');
     const initial = (p.name[0] || '?').toUpperCase();
     const tags = [];
-    if (p.isHost) tags.push('<span class="tag host">HOST</span>');
-    if (p.isMe) tags.push('<span class="tag you">YOU</span>');
-    if (p.isBot) tags.push('<span class="tag bot">BOT</span>');
+    if (p.isHost) tags.push('<span class="tag host">host</span>');
+    if (p.isMe) tags.push('<span class="tag you">you</span>');
+    if (p.isBot) tags.push('<span class="tag bot">bot</span>');
     el.innerHTML = `
       <div class="avatar" style="--c:${colorFor(p.id)}"><span>${esc(initial)}</span></div>
       <div class="pname">${esc(p.name)}</div>
@@ -146,10 +113,10 @@
     return el;
   }
 
-  // ---------- game ----------
+  // ---------------- game ----------------
   function renderGame() {
     const s = T.state;
-    $('#trivia-progress').textContent = s.phase === 'final' ? '🏁 Final Results' : `Round ${s.round} / ${s.totalRounds}`;
+    $('#trivia-progress').textContent = s.phase === 'final' ? 'Final results' : `Round ${s.round} / ${s.totalRounds}`;
     $('#trivia-answered').textContent = s.phase === 'question' ? `${s.answeredCount}/${s.connectedCount} answered` : '';
     renderTimer();
 
@@ -157,70 +124,70 @@
     stage.innerHTML = '';
     if (s.phase === 'final') { stage.appendChild(finalCard()); return; }
 
-    // question card
     const q = s.question;
+    if (!q) return;
+    const reveal = s.phase === 'reveal';
+
     const card = document.createElement('div');
     card.className = 'trivia-q';
     card.innerHTML = `<div class="q-cat">${esc(q.category)}</div><div class="q-text">${esc(q.text)}</div>`;
     stage.appendChild(card);
 
-    // options
     const opts = document.createElement('div');
     opts.className = 'trivia-options';
-    const reveal = s.phase === 'reveal';
     q.options.forEach((text, i) => {
       const b = document.createElement('button');
-      b.className = `trivia-opt ${OPTCOLORS[i]}`;
       b.type = 'button';
-      b.innerHTML = `<span class="opt-shape">${OPTSHAPE[i]}</span><span class="opt-text">${esc(text)}</span>`;
+      b.className = `trivia-opt ${OPT_COLORS[i] || ''}`;
+      b.innerHTML = `<span class="opt-shape">${OPT_LETTERS[i] || i + 1}</span><span class="opt-text">${esc(text)}</span>`;
       if (reveal) {
         if (i === q.answer) b.classList.add('correct');
         else if (i === s.yourChoice) b.classList.add('wrong');
         else b.classList.add('dim');
+        b.disabled = true;
       } else {
         if (s.youAnswered) {
           b.classList.add('locked');
           if (i === s.yourChoice) b.classList.add('chosen');
+          b.disabled = true;
         } else {
-          b.addEventListener('click', () => {
-            T.socket.emit('triviaAnswer', { choice: i });
-          });
+          b.addEventListener('click', () => T.socket.emit('triviaAnswer', { choice: i }));
         }
       }
       opts.appendChild(b);
     });
     stage.appendChild(opts);
 
-    // status line
     const note = document.createElement('p');
-    note.className = 'sub trivia-note';
+    note.className = 'trivia-note';
     if (reveal) {
       const me = s.players.find((p) => p.isMe);
-      if (me && me.lastCorrect) note.textContent = `✅ Correct! +${me.lastGain} points`;
-      else if (me && me.lastCorrect === false) note.textContent = '❌ Not this time.';
+      if (me && me.lastCorrect) note.textContent = `Correct · +${me.lastGain} points.`;
+      else if (me && me.lastCorrect === false) note.textContent = 'Not this time.';
       else note.textContent = 'Round over.';
     } else {
-      note.textContent = s.youAnswered ? 'Locked in! Waiting for others…' : 'Tap your answer — fast!';
+      note.textContent = s.youAnswered ? 'Locked in. Waiting for the rest of the table.' : 'Tap your answer — faster is worth more.';
     }
     stage.appendChild(note);
 
-    // live scoreboard
     stage.appendChild(scoreboard(s, reveal));
   }
 
   function scoreboard(s, showDelta) {
     const box = document.createElement('div');
-    box.className = 'trivia-scores';
+    box.className = 'party-scores';
     s.standings.forEach((row, i) => {
       const p = s.players.find((x) => x.id === row.id) || {};
-      const r = document.createElement('div');
-      r.className = 'ts-row' + (row.id === T.youId ? ' me' : '');
-      const delta = showDelta && p.lastGain ? `<span class="ts-delta">+${p.lastGain}</span>` : '';
-      const ans = (s.phase === 'question' && p.answered) ? '<span class="ts-lock">🔒</span>' : '';
-      r.innerHTML = `<span class="ts-rank">${i + 1}</span>` +
-        `<span class="ts-name">${esc(row.name)}${row.isBot ? ' <small>bot</small>' : ''}</span>` +
-        `${ans}${delta}<span class="ts-score">${row.score}</span>`;
-      box.appendChild(r);
+      const el = document.createElement('div');
+      el.className = 'ps-row' + (row.id === T.youId ? ' me' : '');
+      const delta = showDelta && p.lastGain ? `<span class="ps-delta">+${p.lastGain}</span>` : '';
+      const lock = (s.phase === 'question' && p.answered) ? '<span class="ps-lock">in</span>' : '';
+      el.innerHTML = `
+        <span class="ps-rank">${i + 1}</span>
+        <span class="ps-name">${esc(row.name)}${row.isBot ? ' <small>bot</small>' : ''}</span>
+        ${lock}${delta}
+        <span class="ps-score">${row.score}</span>`;
+      box.appendChild(el);
     });
     return box;
   }
@@ -229,18 +196,18 @@
     const s = T.state;
     const wrap = document.createElement('div');
     wrap.className = 'trivia-final';
+
     const top3 = s.standings.slice(0, 3);
     const podium = document.createElement('div');
     podium.className = 'podium';
-    const order = [1, 0, 2]; // silver, gold, bronze visual order
-    order.forEach((rank) => {
+    [1, 0, 2].forEach((rank) => {
       const row = top3[rank];
       if (!row) return;
       const col = document.createElement('div');
       col.className = `podium-col p${rank + 1}`;
       col.innerHTML = `
-        <div class="podium-medal">${['🥇','🥈','🥉'][rank]}</div>
-        <div class="avatar" style="--c:${colorFor(row.id)}"><span>${esc((row.name[0]||'?').toUpperCase())}</span></div>
+        <div class="podium-medal">#${rank + 1}</div>
+        <div class="avatar" style="--c:${colorFor(row.id)}"><span>${esc((row.name[0] || '?').toUpperCase())}</span></div>
         <div class="podium-name">${esc(row.name)}</div>
         <div class="podium-score">${row.score}</div>
         <div class="podium-bar"></div>`;
@@ -250,22 +217,20 @@
 
     const won = s.winner && s.winner.id === T.youId;
     const title = document.createElement('h2');
-    title.textContent = won ? '🏆 You won!' : `🏆 ${s.winner ? s.winner.name : 'Nobody'} wins!`;
+    title.textContent = won ? 'You won the room.' : `${s.winner ? s.winner.name : 'Nobody'} wins.`;
     wrap.appendChild(title);
 
-    // full standings
     wrap.appendChild(scoreboard(s, false));
 
-    // leaderboard (all-time)
     const lb = document.createElement('div');
     lb.className = 'leaderboard';
     wrap.appendChild(lb);
-    window.LB.render(lb, 'trivia', { format: (r) => `${r.score}` });
+    if (window.LB) window.LB.render(lb, 'trivia', { format: (r) => `${r.score}` });
 
     const actions = document.createElement('div');
     actions.className = 'overlay-actions';
-    if (s.isHost) actions.appendChild(mkBtn('Play again', '', () => T.socket.emit('triviaPlayAgain')));
-    actions.appendChild(mkBtn('Main menu', 'ghost', leave));
+    if (s.isHost) actions.appendChild(mkBtn('Play again', 'btn btn-ink', () => T.socket.emit('triviaPlayAgain')));
+    actions.appendChild(mkBtn('Main menu', 'btn btn-quiet', leave));
     wrap.appendChild(actions);
     return wrap;
   }
@@ -273,9 +238,9 @@
   function renderTimer() {
     const bar = $('#trivia-timerbar');
     const span = bar.firstElementChild;
-    if (T.timerInt) { clearInterval(T.timerInt); T.timerInt = null; }
+    stopTimer();
     const s = T.state;
-    if (!s.phaseEndsAt || s.phase === 'final') { bar.classList.add('hidden'); return; }
+    if (!s.phaseEndsAt || s.phase === 'final' || s.phase === 'lobby') { bar.classList.add('hidden'); return; }
     bar.classList.remove('hidden');
     const dur = (s.durations && s.durations[s.phase]) || 1;
     const tick = () => {
@@ -284,15 +249,13 @@
       span.style.width = pct + '%';
       span.textContent = Math.ceil(remain / 1000) + 's';
       span.classList.toggle('urgent', remain < 6000);
-      if (remain <= 0 && T.timerInt) { clearInterval(T.timerInt); T.timerInt = null; }
     };
     tick();
     T.timerInt = setInterval(tick, 250);
   }
+  function stopTimer() { if (T.timerInt) { clearInterval(T.timerInt); T.timerInt = null; } }
 
-  // ---------- helpers ----------
-  const PALETTE = ['#ff5d73', '#34d1bf', '#6c8cff', '#f6c453', '#b06cff',
-                   '#ff9f43', '#2ed573', '#ff6b9d', '#4bcffa', '#c0e218', '#e84393', '#00cec9'];
+  // ---------------- helpers ----------------
   function colorFor(id) {
     if (!T.state) return PALETTE[0];
     const idx = T.state.players.findIndex((p) => p.id === id);
@@ -300,14 +263,16 @@
   }
   function mkBtn(label, cls, onClick) {
     const b = document.createElement('button');
-    b.textContent = label; if (cls) b.className = cls; b.type = 'button';
+    b.type = 'button';
+    b.textContent = label;
+    if (cls) b.className = cls;
     b.addEventListener('click', onClick);
     return b;
   }
   function esc(str) {
-    return String(str).replace(/[&<>"']/g, (c) =>
+    return String(str == null ? '' : str).replace(/[&<>"']/g, (c) =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  window.TriviaClient = { init, open };
+  window.TriviaClient = { init, leave };
 })();

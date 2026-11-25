@@ -2,269 +2,555 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Game Arcade — 8 mini-games</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#f2eee5" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161512'/%3E%3Cpath d='M10 8v16M22 8v16M8 10h16M8 22h16' stroke='%23f2eee5' stroke-width='1.6'/%3E%3C/svg%3E" />
+  <title>The Arcade — eleven games, one ledger</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- ================= MENU ================= -->
-    <section id="menu" class="screen active">
-      <h1>Game Arcade</h1>
-      <p class="sub">Pick a game, then choose your mode.</p>
-
-      <div class="cards">
-        <button class="game-card" data-game="barricade">
-          <span class="emoji">🧱</span>
-          <span class="title">Barricade</span>
-          <span class="desc">Quoridor-style. Race across the board while walling off your rival.</span>
-        </button>
-        <button class="game-card" data-game="ttt">
-          <span class="emoji">♾️</span>
-          <span class="title">Infinite Tic&nbsp;Tac&nbsp;Toe</span>
-          <span class="desc">3-piece limit. Your oldest mark vanishes — no more draws.</span>
-        </button>
-        <button class="game-card" data-game="island">
-          <span class="emoji">🏝️</span>
-          <span class="title">Island</span>
-          <span class="desc">3+ players, stranded. Whisper, scheme, and vote each other out until one survives.</span>
-        </button>
-        <button class="game-card" data-game="connect4">
-          <span class="emoji">🔴</span>
-          <span class="title">Connect 4</span>
-          <span class="desc">Drop discs and line up four in a row. Play a friend or a sharp AI.</span>
-        </button>
-        <button class="game-card" data-game="reversi">
-          <span class="emoji">⚫</span>
-          <span class="title">Reversi</span>
-          <span class="desc">Othello rules. Outflank to flip discs and own the board.</span>
-        </button>
-        <button class="game-card" data-game="g2048">
-          <span class="emoji">🔢</span>
-          <span class="title">2048</span>
-          <span class="desc">Solo. Swipe to merge tiles and chase the elusive 2048.</span>
-        </button>
-        <button class="game-card" data-game="memory">
-          <span class="emoji">🧠</span>
-          <span class="title">Memory Match</span>
-          <span class="desc">Solo. Flip cards, find every pair in the fewest moves.</span>
-        </button>
-        <button class="game-card" data-game="trivia">
-          <span class="emoji">❓</span>
-          <span class="title">Trivia Royale</span>
-          <span class="desc">3+ players race to answer fastest. Speed = points. Bots can fill in.</span>
-        </button>
-      </div>
-    </section>
-
-    <!-- ================= MODE SELECT ================= -->
-    <section id="mode" class="screen">
-      <button class="back" data-back="menu">← Back</button>
-      <h2 id="mode-title">Choose mode</h2>
-
-      <div class="mode-grid">
-        <button class="mode-btn" data-mode="pve">
-          <span class="emoji">🤖</span><span>Player vs Computer</span>
-        </button>
-        <button class="mode-btn" data-mode="pvp-create">
-          <span class="emoji">🧑‍🤝‍🧑</span><span>Create Online Room</span>
-        </button>
-        <button class="mode-btn" data-mode="pvp-join">
-          <span class="emoji">🔗</span><span>Join with Code</span>
-        </button>
-      </div>
-
-      <div id="difficulty-wrap" class="diff-wrap">
-        <label>Computer difficulty</label>
-        <div class="seg">
-          <button class="seg-btn active" data-diff="easy">Easy</button>
-          <button class="seg-btn" data-diff="hard">Hard</button>
-        </div>
-      </div>
-
-      <div id="join-wrap" class="join-wrap hidden">
-        <input id="join-code" maxlength="4" placeholder="CODE" autocomplete="off" />
-        <button id="join-go">Join</button>
-      </div>
-    </section>
-
-    <!-- ================= GAME ================= -->
-    <section id="game" class="screen">
-      <div class="topbar">
-        <button class="back" data-back="quit">← Quit</button>
-        <div id="status" class="status">…</div>
-        <button id="rematch" class="rematch hidden">Rematch</button>
-      </div>
-
-      <div id="room-banner" class="room-banner hidden"></div>
-
-      <!-- Barricade controls -->
-      <div id="bar-controls" class="bar-controls hidden">
-        <div class="seg">
-          <button class="seg-btn active" data-tool="move">Move pawn</button>
-          <button class="seg-btn" data-tool="wall">Place wall</button>
-        </div>
-        <div id="orient-seg" class="seg hidden">
-          <button class="seg-btn active" data-orient="h">↔ Horizontal</button>
-          <button class="seg-btn" data-orient="v">↕ Vertical</button>
-        </div>
-      </div>
-
-      <div id="board-wrap" class="board-wrap"></div>
-
-      <div id="overlay" class="overlay hidden">
-        <div class="overlay-card">
-          <h2 id="overlay-title">Result</h2>
-          <p id="overlay-text"></p>
-          <div class="overlay-actions">
-            <button id="overlay-rematch">Play again</button>
-            <button id="overlay-menu" class="ghost">Main menu</button>
+    <!-- ================= AUTH ================= -->
+    <section id="auth-screen" class="screen active auth-screen">
+      <div class="auth-grid">
+        <div class="auth-panel">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="4"/><path d="M10 8v16M22 8v16M8 10h16M8 22h16"/></svg>
           </div>
-        </div>
-      </div>
-    </section>
+          <p class="kicker">University arcade · season one</p>
+          <h1>The Arcade</h1>
+          <p class="lede">Eleven games. One shared ledger. Play solo, against the house, or with everyone in the room.</p>
 
-    <!-- ================= ISLAND: SETUP ================= -->
-    <section id="island-setup" class="screen">
-      <button class="back island-tomenu">← Back</button>
-      <h1 class="island-title">🏝️ Island</h1>
-      <p class="sub">Whisper. Scheme. Survive the night.</p>
-      <div class="island-setup">
-        <label>Your name</label>
-        <input id="island-name" maxlength="16" placeholder="Enter your name" autocomplete="off" />
-        <button id="island-create" class="primary-btn">Create Room</button>
-        <div class="island-or"><span>or join a friend</span></div>
-        <div class="island-join-row">
-          <input id="island-join-code" maxlength="4" placeholder="CODE" autocomplete="off" />
-          <button id="island-join">Join</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ================= ISLAND: LOBBY ================= -->
-    <section id="island-lobby" class="screen">
-      <button class="back island-leave">← Leave</button>
-      <h2>Lobby</h2>
-      <div id="island-lobby-banner" class="room-banner"></div>
-      <div id="island-lobby-players" class="island-grid"></div>
-      <div id="island-lobby-controls" class="island-lobby-controls"></div>
-      <p id="island-lobby-hint" class="sub"></p>
-    </section>
-
-    <!-- ================= ISLAND: GAME ================= -->
-    <section id="island-game" class="screen">
-      <div class="topbar">
-        <button class="back island-leave">← Leave</button>
-        <div id="island-phase" class="status">…</div>
-        <div id="island-night" class="island-night"></div>
-      </div>
-      <div id="island-timerbar" class="island-timerbar"><span></span></div>
-      <div id="island-stage" class="island-stage"></div>
-      <div id="island-action" class="island-action"></div>
-      <div id="island-dock" class="island-dock"></div>
-    </section>
-
-    <!-- ================= 2048 ================= -->
-    <section id="g2048-screen" class="screen">
-      <div class="topbar">
-        <button class="back g2048-back">← Back</button>
-        <div class="status">2048</div>
-        <button class="rematch" id="g2048-new">New</button>
-      </div>
-      <div class="g2048-scores">
-        <div class="score-box"><span class="lbl">Score</span><span id="g2048-score">0</span></div>
-        <div class="score-box"><span class="lbl">Best</span><span id="g2048-best">0</span></div>
-      </div>
-      <div id="g2048-board" class="g2048-board"></div>
-      <p class="sub g2048-hint">Use arrow keys or swipe. Merge equal tiles!</p>
-      <div id="g2048-lb" class="leaderboard"></div>
-      <div id="g2048-overlay" class="overlay hidden">
-        <div class="overlay-card">
-          <h2 id="g2048-result-title">Game Over</h2>
-          <p id="g2048-result-text"></p>
-          <div id="g2048-save" class="lb-save"></div>
-          <div class="overlay-actions">
-            <button id="g2048-again">Play again</button>
-            <button id="g2048-menu" class="ghost">Main menu</button>
+          <div class="auth-tabs" role="tablist" aria-label="Account">
+            <button type="button" class="auth-tab is-active" data-auth-tab="login" role="tab" aria-selected="true">Sign in</button>
+            <button type="button" class="auth-tab" data-auth-tab="register" role="tab" aria-selected="false">Create account</button>
           </div>
-        </div>
-      </div>
-    </section>
 
-    <!-- ================= MEMORY MATCH ================= -->
-    <section id="memory-screen" class="screen">
-      <div class="topbar">
-        <button class="back memory-back">← Back</button>
-        <div class="status">Memory Match</div>
-        <button class="rematch" id="memory-new">New</button>
-      </div>
-      <div class="memory-bar">
-        <div class="score-box"><span class="lbl">Moves</span><span id="memory-moves">0</span></div>
-        <div class="score-box"><span class="lbl">Time</span><span id="memory-time">0:00</span></div>
-        <div class="score-box"><span class="lbl">Pairs</span><span id="memory-pairs">0</span></div>
-      </div>
-      <div class="memory-diff seg" id="memory-diff">
-        <button class="seg-btn active" data-size="4">Easy 4×4</button>
-        <button class="seg-btn" data-size="6">Hard 6×6</button>
-      </div>
-      <div id="memory-board" class="memory-board"></div>
-      <div id="memory-lb" class="leaderboard"></div>
-      <div id="memory-overlay" class="overlay hidden">
-        <div class="overlay-card">
-          <h2>You did it! 🎉</h2>
-          <p id="memory-result-text"></p>
-          <div id="memory-save" class="lb-save"></div>
-          <div class="overlay-actions">
-            <button id="memory-again">Play again</button>
-            <button id="memory-menu" class="ghost">Main menu</button>
+          <form id="auth-form" class="auth-form" novalidate>
+            <label class="field">
+              <span>Username</span>
+              <input id="auth-username" name="username" autocomplete="username" maxlength="16" required
+                     pattern="[A-Za-z0-9_]{3,16}" placeholder="three to sixteen characters" />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="auth-password" name="password" type="password" autocomplete="current-password"
+                     minlength="8" maxlength="72" required placeholder="at least eight characters" />
+            </label>
+            <button id="auth-submit" class="btn btn-ink btn-block" type="submit">Sign in</button>
+            <p id="auth-msg" class="form-msg" role="status" aria-live="polite"></p>
+          </form>
+
+          <p class="fineprint">Sixty seats. Passwords are salted and hashed with scrypt. Sessions are httpOnly and same-site strict.</p>
+        </div>
+
+        <aside class="auth-aside" aria-hidden="true">
+          <div class="aside-board">
+            <span class="aside-cell"></span><span class="aside-cell"></span><span class="aside-cell"></span>
+            <span class="aside-cell"></span><span class="aside-cell is-ink"></span><span class="aside-cell"></span>
+            <span class="aside-cell"></span><span class="aside-cell"></span><span class="aside-cell is-accent"></span>
           </div>
+          <div class="aside-rules">
+            <p class="kicker">How the ledger works</p>
+            <ul class="rule-list">
+              <li><span>Online win</span><b>full pool</b></li>
+              <li><span>Win vs. computer</span><b>about a third</b></li>
+              <li><span>Second place</span><b>partial pool</b></li>
+              <li><span>Derby</span><b>wager &amp; payout</b></li>
+            </ul>
+            <p class="aside-note">Every game keeps its own prize pool. Win online to move the overall board.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= APP SHELL ================= -->
+    <div id="shell" class="shell hidden">
+      <header class="app-header">
+        <button class="brand-link" id="brand-home" type="button">
+          <span class="brand-mark brand-mark-sm" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><rect x="2" y="2" width="28" height="28" rx="4"/><path d="M10 8v16M22 8v16M8 10h16M8 22h16"/></svg>
+          </span>
+          <span>The Arcade</span>
+        </button>
+
+        <nav class="app-nav" aria-label="Primary">
+          <button type="button" class="nav-link is-active" data-nav="menu">Play</button>
+          <button type="button" class="nav-link" data-nav="ranks">Ranks</button>
+          <button type="button" class="nav-link" data-nav="derby">Derby</button>
+        </nav>
+
+        <div class="account">
+          <div class="account-chip" title="Signed in">
+            <span id="account-initial" class="account-initial">A</span>
+            <span class="account-copy">
+              <span id="account-name" class="account-name">Player</span>
+              <span class="account-points"><span id="account-points">0</span> pts</span>
+            </span>
+          </div>
+          <button type="button" id="logout-btn" class="btn btn-quiet btn-sm">Sign out</button>
         </div>
-      </div>
-    </section>
+      </header>
 
-    <!-- ================= TRIVIA: SETUP ================= -->
-    <section id="trivia-setup" class="screen">
-      <button class="back trivia-tomenu">← Back</button>
-      <h1 class="trivia-title">❓ Trivia Royale</h1>
-      <p class="sub">Answer fast. Faster = more points.</p>
-      <div class="island-setup">
-        <label>Your name</label>
-        <input id="trivia-name" maxlength="16" placeholder="Enter your name" autocomplete="off" />
-        <button id="trivia-create" class="primary-btn">Create Room</button>
-        <div class="island-or"><span>or join a friend</span></div>
-        <div class="island-join-row">
-          <input id="trivia-join-code" maxlength="4" placeholder="CODE" autocomplete="off" />
-          <button id="trivia-join">Join</button>
-        </div>
-      </div>
-    </section>
+      <main id="main">
 
-    <!-- ================= TRIVIA: LOBBY ================= -->
-    <section id="trivia-lobby" class="screen">
-      <button class="back trivia-leave">← Leave</button>
-      <h2>Lobby</h2>
-      <div id="trivia-lobby-banner" class="room-banner"></div>
-      <div id="trivia-rounds" class="trivia-rounds"></div>
-      <div id="trivia-lobby-players" class="island-grid"></div>
-      <div id="trivia-lobby-controls" class="island-lobby-controls"></div>
-      <p id="trivia-lobby-hint" class="sub"></p>
-    </section>
+        <!-- ================= MENU ================= -->
+        <section id="menu" class="screen active">
+          <div class="menu-head">
+            <div>
+              <p class="kicker">Season one · sixty seats</p>
+              <h1>Choose a table.</h1>
+              <p class="lede">Solo runs, head-to-head rooms, and party games for three or more. Every win feeds the same ledger.</p>
+            </div>
+            <div class="wallet-card">
+              <span class="kicker">Your points</span>
+              <strong id="menu-points">0</strong>
+              <span id="menu-rank" class="meta">Unranked</span>
+            </div>
+          </div>
 
-    <!-- ================= TRIVIA: GAME ================= -->
-    <section id="trivia-game" class="screen">
-      <div class="topbar">
-        <button class="back trivia-leave">← Leave</button>
-        <div id="trivia-progress" class="status">…</div>
-        <div id="trivia-answered" class="island-night"></div>
-      </div>
-      <div id="trivia-timerbar" class="island-timerbar"><span></span></div>
-      <div id="trivia-stage" class="trivia-stage"></div>
-    </section>
+          <div class="game-grid" id="game-grid">
+            <button class="game-card" data-game="barricade" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/><path d="M12 3.5v17M3.5 12h17"/><path d="M14 8.5h5.5V10H14z" fill="currentColor" stroke="none"/></svg></span>
+              <span class="game-num">01</span>
+              <span class="game-title">Barricade</span>
+              <span class="game-desc">Race your pawn across a nine-by-nine board. Spend walls to lengthen the other player's road.</span>
+              <span class="game-meta"><span>2 players</span><span>Online pool 140</span></span>
+            </button>
 
+            <button class="game-card" data-game="ttt" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></span>
+              <span class="game-num">02</span>
+              <span class="game-title">Infinite Tic Tac Toe</span>
+              <span class="game-desc">Three marks each. Place a fourth and your oldest vanishes, so every line is borrowed.</span>
+              <span class="game-meta"><span>2 players</span><span>Online pool 110</span></span>
+            </button>
+
+            <button class="game-card" data-game="connect4" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="7" cy="6" r="2.2"/><circle cx="7" cy="12" r="2.2"/><circle cx="7" cy="18" r="2.2"/><circle cx="17" cy="12" r="2.2"/><circle cx="17" cy="18" r="2.2"/></svg></span>
+              <span class="game-num">03</span>
+              <span class="game-title">Connect 4</span>
+              <span class="game-desc">Drop discs, build a line of four. The house AI plays minimax; humans play looser.</span>
+              <span class="game-meta"><span>2 players</span><span>Online pool 140</span></span>
+            </button>
+
+            <button class="game-card" data-game="reversi" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="12" r="5"/><path d="M9 7a5 5 0 0 1 0 10z" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="5"/></svg></span>
+              <span class="game-num">04</span>
+              <span class="game-title">Reversi</span>
+              <span class="game-desc">Outflank and flip. Corners are worth more than they look, and forced passes are handled.</span>
+              <span class="game-meta"><span>2 players</span><span>Online pool 140</span></span>
+            </button>
+
+            <button class="game-card" data-game="island" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 18c3-2 6-2 9 0s6 2 9 0"/><path d="M12 18V9"/><path d="M12 9c-3-1-5-3-5-5 3 0 5 2 5 5zM12 9c3-1 5-3 5-5-3 0-5 2-5 5z"/></svg></span>
+              <span class="game-num">05</span>
+              <span class="game-title">Island</span>
+              <span class="game-desc">Whisper in private, then vote someone out. Ties skip the night; the dead decide the final two.</span>
+              <span class="game-meta"><span>3–10 players</span><span>Online pool 220</span></span>
+            </button>
+
+            <button class="game-card" data-game="trivia" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M9.8 9a2.2 2.2 0 1 1 2.7 2.1c-.6.2-.8.6-.8 1.2"/><circle cx="11.7" cy="14.4" r=".7" fill="currentColor" stroke="none"/></svg></span>
+              <span class="game-num">06</span>
+              <span class="game-title">Trivia Royale</span>
+              <span class="game-desc">The same question for everyone. Faster correct answers are worth more.</span>
+              <span class="game-meta"><span>3–12 players</span><span>Online pool 190</span></span>
+            </button>
+
+            <button class="game-card" data-game="wordbomb" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M5 7h4M15 17h4M13 5h4M5 17h4"/></svg></span>
+              <span class="game-num">07</span>
+              <span class="game-title">Word Bomb</span>
+              <span class="game-desc">A bigram appears. Every player needs one fresh word that contains it, before the clock burns down.</span>
+              <span class="game-meta"><span>3–8 players</span><span>Online pool 200</span></span>
+            </button>
+
+            <button class="game-card" data-game="inkrush" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3s6 6.2 6 10a6 6 0 0 1-12 0c0-3.8 6-10 6-10z"/><path d="M9 13a3 3 0 0 0 3 3"/></svg></span>
+              <span class="game-num">08</span>
+              <span class="game-title">Ink Rush</span>
+              <span class="game-desc">The word says one colour; the ink says another. Tap the ink. Faster taps score more.</span>
+              <span class="game-meta"><span>3–8 players</span><span>Online pool 190</span></span>
+            </button>
+
+            <button class="game-card" data-game="g2048" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></span>
+              <span class="game-num">09</span>
+              <span class="game-title">2048</span>
+              <span class="game-desc">Swipe to merge equal tiles. A solo run with a fixed completion prize.</span>
+              <span class="game-meta"><span>Solo</span><span>Offline pool 20</span></span>
+            </button>
+
+            <button class="game-card" data-game="memory" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="10" height="12" rx="1.5"/><rect x="11" y="3" width="10" height="12" rx="1.5"/></svg></span>
+              <span class="game-num">10</span>
+              <span class="game-title">Memory Match</span>
+              <span class="game-desc">Flip cards, find every pair. Fewer moves and a quicker clock earn the prize.</span>
+              <span class="game-meta"><span>Solo</span><span>Offline pool 20</span></span>
+            </button>
+
+            <button class="game-card game-card-derby" data-game="derby" type="button">
+              <span class="game-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V4l8 3-8 3"/><path d="M14 20V9l6 3"/><circle cx="6" cy="19" r="2"/><circle cx="17" cy="19" r="2"/></svg></span>
+              <span class="game-num">11</span>
+              <span class="game-title">The Derby</span>
+              <span class="game-desc">Wager points on four horses. Odds move with the crowd; longshots pay more.</span>
+              <span class="game-meta"><span>Stake points</span><span>Live race</span></span>
+            </button>
+          </div>
+
+          <section class="menu-lower">
+            <div class="panel">
+              <div class="panel-head">
+                <h2>Top of the ledger</h2>
+                <button type="button" class="link-btn" data-nav="ranks">View all ranks</button>
+              </div>
+              <div id="menu-ranks" class="rank-strip"><p class="empty-note">Loading ranks…</p></div>
+            </div>
+            <div class="panel panel-notes">
+              <p class="kicker">A note on points</p>
+              <p>Online wins are worth roughly three times a win against the computer. That keeps the top of the board about people, not grinding.</p>
+              <p class="meta">Max sixty accounts. Points are stored on the server, never in the browser.</p>
+            </div>
+          </section>
+        </section>
+
+        <!-- ================= MODE ================= -->
+        <section id="mode" class="screen">
+          <button class="back" data-back="menu" type="button">Back to tables</button>
+          <div class="mode-head">
+            <p class="kicker">Choose a mode</p>
+            <h1 id="mode-title">Choose a mode</h1>
+            <p id="mode-prize" class="lede"></p>
+          </div>
+
+          <div class="mode-grid">
+            <button class="mode-card is-primary" id="mode-mm" data-mode="mm" type="button">
+              <span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><circle cx="17" cy="15" r="3"/><path d="M9 12v3a3 3 0 0 0 3 3h2"/></svg></span>
+              <span class="mode-copy"><b>Find players</b><span>Matchmaking fills a room and starts the game.</span></span>
+            </button>
+            <button class="mode-card" id="mode-create" data-mode="create" type="button">
+              <span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg></span>
+              <span class="mode-copy"><b>Create a private room</b><span>Get a short code and invite people you know.</span></span>
+            </button>
+            <button class="mode-card" id="mode-join" data-mode="join" type="button">
+              <span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg></span>
+              <span class="mode-copy"><b>Join with a code</b><span>Enter the four-character room code.</span></span>
+            </button>
+            <button class="mode-card" id="mode-pve" data-mode="pve" type="button">
+              <span class="mode-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="2"/><path d="M12 8V5M9 13h.01M15 13h.01M9 16h6"/></svg></span>
+              <span class="mode-copy"><b>Play the computer</b><span>Offline prize. No waiting.</span></span>
+            </button>
+          </div>
+
+          <div id="difficulty-wrap" class="diff-wrap">
+            <span class="field-label">Computer strength</span>
+            <div class="seg" role="group" aria-label="Computer strength">
+              <button class="seg-btn is-active" data-diff="easy" type="button">Easy</button>
+              <button class="seg-btn" data-diff="hard" type="button">Hard</button>
+            </div>
+          </div>
+
+          <div id="join-wrap" class="join-wrap hidden">
+            <label class="field field-inline">
+              <span>Room code</span>
+              <input id="join-code" maxlength="4" placeholder="ABCD" autocomplete="off" />
+            </label>
+            <button id="join-go" class="btn btn-ink" type="button">Join room</button>
+          </div>
+
+          <p id="mode-note" class="fineprint"></p>
+        </section>
+
+        <!-- ================= MATCHMAKING ================= -->
+        <section id="matchmaking" class="screen">
+          <button class="back" data-back="menu" type="button">Cancel search</button>
+          <div class="mm-wrap">
+            <p class="kicker">Matchmaking</p>
+            <h1 id="mm-title">Finding players</h1>
+            <p id="mm-status" class="lede">Looking for a room…</p>
+            <div class="mm-meter" aria-hidden="true"><span id="mm-meter-fill"></span></div>
+            <p id="mm-count" class="meta">0 waiting · 2 needed</p>
+            <button id="mm-cancel" class="btn btn-quiet" type="button">Stop searching</button>
+            <p class="fineprint">If nobody arrives within thirty seconds, the room fills with the house so you can still play.</p>
+          </div>
+        </section>
+
+        <!-- ================= TWO-PLAYER GAME ================= -->
+        <section id="game" class="screen">
+          <div class="game-topbar">
+            <button class="back" data-back="quit" type="button">Leave table</button>
+            <div id="status" class="status">…</div>
+            <button id="rematch" class="btn btn-quiet btn-sm hidden" type="button">Rematch</button>
+          </div>
+
+          <div id="room-banner" class="room-banner hidden"></div>
+
+          <div id="bar-controls" class="bar-controls hidden">
+            <div class="seg" role="group" aria-label="Tool">
+              <button class="seg-btn is-active" data-tool="move" type="button">Move pawn</button>
+              <button class="seg-btn" data-tool="wall" type="button">Place wall</button>
+            </div>
+            <div id="orient-seg" class="seg hidden" role="group" aria-label="Wall direction">
+              <button class="seg-btn is-active" data-orient="h" type="button">Horizontal</button>
+              <button class="seg-btn" data-orient="v" type="button">Vertical</button>
+            </div>
+          </div>
+
+          <div id="board-wrap" class="board-wrap"></div>
+
+          <div id="overlay" class="overlay hidden">
+            <div class="overlay-card">
+              <p class="kicker">Result</p>
+              <h2 id="overlay-title">Result</h2>
+              <p id="overlay-text"></p>
+              <div id="overlay-points" class="overlay-points"></div>
+              <div class="overlay-actions">
+                <button id="overlay-rematch" class="btn btn-ink" type="button">Play again</button>
+                <button id="overlay-menu" class="btn btn-quiet" type="button">Main menu</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= ISLAND ================= -->
+        <section id="island-lobby" class="screen">
+          <button class="back island-leave" type="button">Leave lobby</button>
+          <div class="lobby-head">
+            <p class="kicker">Island · lobby</p>
+            <h1>Gather the islanders.</h1>
+            <div id="island-lobby-banner" class="room-banner"></div>
+          </div>
+          <div id="island-lobby-players" class="player-grid"></div>
+          <div id="island-lobby-controls" class="lobby-controls"></div>
+          <p id="island-lobby-hint" class="fineprint"></p>
+        </section>
+
+        <section id="island-game" class="screen">
+          <div class="game-topbar">
+            <button class="back island-leave" type="button">Leave game</button>
+            <div id="island-phase" class="status">…</div>
+            <div id="island-night" class="meta"></div>
+          </div>
+          <div id="island-timerbar" class="timerbar"><span></span></div>
+          <div id="island-stage" class="party-stage"></div>
+          <div id="island-action" class="party-action"></div>
+          <div id="island-dock" class="party-dock"></div>
+        </section>
+
+        <!-- ================= TRIVIA ================= -->
+        <section id="trivia-lobby" class="screen">
+          <button class="back trivia-leave" type="button">Leave lobby</button>
+          <div class="lobby-head">
+            <p class="kicker">Trivia Royale · lobby</p>
+            <h1>Warm up the room.</h1>
+            <div id="trivia-lobby-banner" class="room-banner"></div>
+          </div>
+          <div id="trivia-rounds" class="rounds-row"></div>
+          <div id="trivia-lobby-players" class="player-grid"></div>
+          <div id="trivia-lobby-controls" class="lobby-controls"></div>
+          <p id="trivia-lobby-hint" class="fineprint"></p>
+        </section>
+
+        <section id="trivia-game" class="screen">
+          <div class="game-topbar">
+            <button class="back trivia-leave" type="button">Leave game</button>
+            <div id="trivia-progress" class="status">…</div>
+            <div id="trivia-answered" class="meta"></div>
+          </div>
+          <div id="trivia-timerbar" class="timerbar"><span></span></div>
+          <div id="trivia-stage" class="party-stage"></div>
+        </section>
+
+        <!-- ================= WORD BOMB ================= -->
+        <section id="wordbomb-lobby" class="screen">
+          <button class="back wordbomb-leave" type="button">Leave lobby</button>
+          <div class="lobby-head">
+            <p class="kicker">Word Bomb · lobby</p>
+            <h1>Bring a vocabulary.</h1>
+            <div id="wordbomb-lobby-banner" class="room-banner"></div>
+          </div>
+          <div id="wordbomb-rounds" class="rounds-row"></div>
+          <div id="wordbomb-lobby-players" class="player-grid"></div>
+          <div id="wordbomb-lobby-controls" class="lobby-controls"></div>
+          <p id="wordbomb-lobby-hint" class="fineprint"></p>
+        </section>
+
+        <section id="wordbomb-game" class="screen">
+          <div class="game-topbar">
+            <button class="back wordbomb-leave" type="button">Leave game</button>
+            <div id="wordbomb-progress" class="status">…</div>
+            <div id="wordbomb-answered" class="meta"></div>
+          </div>
+          <div id="wordbomb-timerbar" class="timerbar"><span></span></div>
+          <div id="wordbomb-stage" class="party-stage"></div>
+        </section>
+
+        <!-- ================= INK RUSH ================= -->
+        <section id="inkrush-lobby" class="screen">
+          <button class="back inkrush-leave" type="button">Leave lobby</button>
+          <div class="lobby-head">
+            <p class="kicker">Ink Rush · lobby</p>
+            <h1>Read the ink, not the word.</h1>
+            <div id="inkrush-lobby-banner" class="room-banner"></div>
+          </div>
+          <div id="inkrush-rounds" class="rounds-row"></div>
+          <div id="inkrush-lobby-players" class="player-grid"></div>
+          <div id="inkrush-lobby-controls" class="lobby-controls"></div>
+          <p id="inkrush-lobby-hint" class="fineprint"></p>
+        </section>
+
+        <section id="inkrush-game" class="screen">
+          <div class="game-topbar">
+            <button class="back inkrush-leave" type="button">Leave game</button>
+            <div id="inkrush-progress" class="status">…</div>
+            <div id="inkrush-answered" class="meta"></div>
+          </div>
+          <div id="inkrush-timerbar" class="timerbar"><span></span></div>
+          <div id="inkrush-stage" class="party-stage"></div>
+        </section>
+
+        <!-- ================= DERBY ================= -->
+        <section id="derby-screen" class="screen">
+          <div class="derby-head">
+            <div>
+              <p class="kicker">The Derby · live</p>
+              <h1>Four horses. One pool.</h1>
+              <p class="lede">Wager points on the horse you like. The field is drawn at random, and the payout is the whole pool split between winning tickets.</p>
+            </div>
+            <div class="wallet-card">
+              <span class="kicker">Available</span>
+              <strong id="derby-wallet">0</strong>
+              <span class="meta">points</span>
+            </div>
+          </div>
+
+          <div class="derby-statusbar">
+            <span id="derby-phase" class="derby-phase">Betting open</span>
+            <span id="derby-timer" class="derby-timer">00:45</span>
+            <span id="derby-pool" class="meta">Pool 0</span>
+          </div>
+
+          <div id="derby-lanes" class="derby-lanes" aria-live="polite"></div>
+
+          <div class="derby-panel">
+            <div class="derby-bet-head">
+              <p class="kicker">Your ticket</p>
+              <p id="derby-bet-target" class="derby-bet-target">Choose a horse</p>
+            </div>
+            <div class="derby-bet-row">
+              <label class="field field-inline">
+                <span>Stake</span>
+                <input id="derby-amount" type="number" min="10" max="5000" step="10" value="50" inputmode="numeric" />
+              </label>
+              <div class="chip-row" id="derby-chips">
+                <button class="chip" data-chip="10" type="button">10</button>
+                <button class="chip" data-chip="25" type="button">25</button>
+                <button class="chip" data-chip="50" type="button">50</button>
+                <button class="chip" data-chip="100" type="button">100</button>
+              </div>
+              <button id="derby-place" class="btn btn-ink" type="button">Place bet</button>
+            </div>
+            <p id="derby-msg" class="form-msg" role="status" aria-live="polite"></p>
+            <p class="fineprint">Minimum 10 points. A horse with more money on it pays less; a longshot pays more. If nobody backs the winner, every stake is refunded.</p>
+          </div>
+
+          <div id="derby-result" class="derby-result hidden"></div>
+        </section>
+
+        <!-- ================= RANKS ================= -->
+        <section id="ranks-screen" class="screen">
+          <div class="menu-head">
+            <div>
+              <p class="kicker">The ledger</p>
+              <h1>Overall ranks.</h1>
+              <p class="lede">Points from every game, added together. The board is ordered by total points, then wins.</p>
+            </div>
+            <div class="wallet-card">
+              <span class="kicker">Your standing</span>
+              <strong id="ranks-rank">—</strong>
+              <span id="ranks-points" class="meta">0 points</span>
+            </div>
+          </div>
+          <div class="ranks-grid">
+            <div class="panel">
+              <div class="panel-head"><h2>Top players</h2><span id="rank-status" class="meta"></span></div>
+              <div id="rank-list" class="rank-list"><p class="empty-note">Loading…</p></div>
+            </div>
+            <div class="panel">
+              <div class="panel-head"><h2>Prize pools</h2><span class="meta">per win</span></div>
+              <div id="prize-list" class="prize-list"><p class="empty-note">Loading…</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 2048 ================= -->
+        <section id="g2048-screen" class="screen">
+          <div class="game-topbar">
+            <button class="back g2048-back" type="button">Back to tables</button>
+            <div class="status">2048</div>
+            <button class="rematch" id="g2048-new" type="button">New run</button>
+          </div>
+          <div class="score-row">
+            <div class="score-box"><span class="score-label">Score</span><span id="g2048-score">0</span></div>
+            <div class="score-box"><span class="score-label">Best</span><span id="g2048-best">0</span></div>
+          </div>
+          <div id="g2048-board" class="g2048-board"></div>
+          <p class="fineprint">Arrow keys or swipe. Merge equal tiles.</p>
+          <div id="g2048-lb" class="leaderboard"></div>
+          <div id="g2048-overlay" class="overlay hidden">
+            <div class="overlay-card">
+              <p class="kicker">Run complete</p>
+              <h2 id="g2048-result-title">Game over</h2>
+              <p id="g2048-result-text"></p>
+              <div id="g2048-save" class="lb-save"></div>
+              <div class="overlay-actions">
+                <button id="g2048-again" class="btn btn-ink" type="button">Play again</button>
+                <button id="g2048-menu" class="btn btn-quiet" type="button">Main menu</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= MEMORY ================= -->
+        <section id="memory-screen" class="screen">
+          <div class="game-topbar">
+            <button class="back memory-back" type="button">Back to tables</button>
+            <div class="status">Memory Match</div>
+            <button class="rematch" id="memory-new" type="button">New deal</button>
+          </div>
+          <div class="score-row">
+            <div class="score-box"><span class="score-label">Moves</span><span id="memory-moves">0</span></div>
+            <div class="score-box"><span class="score-label">Time</span><span id="memory-time">0:00</span></div>
+            <div class="score-box"><span class="score-label">Pairs</span><span id="memory-pairs">0</span></div>
+          </div>
+          <div class="memory-diff seg" id="memory-diff" role="group" aria-label="Board size">
+            <button class="seg-btn is-active" data-size="4" type="button">Easy · 4×4</button>
+            <button class="seg-btn" data-size="6" type="button">Hard · 6×6</button>
+          </div>
+          <div id="memory-board" class="memory-board"></div>
+          <div id="memory-lb" class="leaderboard"></div>
+          <div id="memory-overlay" class="overlay hidden">
+            <div class="overlay-card">
+              <p class="kicker">Cleared</p>
+              <h2>Every pair found.</h2>
+              <p id="memory-result-text"></p>
+              <div id="memory-save" class="lb-save"></div>
+              <div class="overlay-actions">
+                <button id="memory-again" class="btn btn-ink" type="button">Play again</button>
+                <button id="memory-menu" class="btn btn-quiet" type="button">Main menu</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
   </div>
 
-  <div id="toast" class="toast"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/leaderboard.js"></script>
@@ -274,8 +560,12 @@
   <script src="js/reversi.js"></script>
   <script src="js/island.js"></script>
   <script src="js/trivia.js"></script>
+  <script src="js/wordbomb.js"></script>
+  <script src="js/inkrush.js"></script>
+  <script src="js/derby.js"></script>
   <script src="js/g2048.js"></script>
   <script src="js/memory.js"></script>
   <script src="js/main.js"></script>
+  <script src="js/auth.js"></script>
 </body>
 </html>

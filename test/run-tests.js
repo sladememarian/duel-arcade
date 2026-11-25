@@ -10,6 +10,10 @@ const { chooseConnect4Move } = require('../game/connect4AI');
 const { Reversi } = require('../game/reversi');
 const { chooseReversiMove } = require('../game/reversiAI');
 const { Trivia } = require('../game/trivia');
+const { WordBomb } = require('../game/wordbomb');
+const { WORD_SET, wordsWith } = require('../game/wordlist');
+const { InkRush } = require('../game/inkrush');
+const { Derby } = require('../game/derby');
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -530,8 +534,227 @@ test('bots answer and let the round resolve', () => {
   g.addPlayer('b2', 'Bot2', { isBot: true });
   g.start(FAKE_Q);
   g.answer('h', 0, Date.now());
-  g.botAnswer('b1', 1); g.botAnswer('b2', 1); // accuracy 1 → always correct
+  g.botAnswer('b1', 1); g.botAnswer('b2', 1); // accuracy 1 — always correct
   assert.ok(g.allAnswered());
+});
+
+// ---------------- Word Bomb ----------------
+function wordBombWith(n, rounds) {
+  const g = new WordBomb({ rounds });
+  for (let i = 1; i <= n; i++) g.addPlayer('p' + i, 'P' + i);
+  return g;
+}
+function freshWord(g) {
+  const w = wordsWith(g.bigram).find((x) => !g.usedWords.has(x) && x.length >= 3 && x.length <= 12);
+  assert.ok(w, 'no fresh word for bigram ' + g.bigram);
+  return w;
+}
+
+console.log('\n=== Word Bomb ===');
+
+test('needs three players and starts a round with a bigram', () => {
+  const two = wordBombWith(2, 3);
+  assert.strictEqual(two.canStart(), false);
+  const g = wordBombWith(3, 3);
+  assert.ok(g.start().ok);
+  assert.strictEqual(g.phase, 'round');
+  assert.strictEqual(g.bigram.length, 2);
+  assert.strictEqual(g.round, 1);
+});
+
+test('accepts a dictionary word containing the bigram, once', () => {
+  const g = wordBombWith(3, 3); g.start();
+  const w = freshWord(g);
+  assert.ok(g.submit('p1', w, g.roundStart + 1000).ok);
+  assert.strictEqual(g.submit('p1', w, g.roundStart + 1100).ok, false, 'one word per round');
+  const dup = g.submit('p2', w.toUpperCase(), g.roundStart + 1200);
+  assert.strictEqual(dup.ok, false, 'word already used');
+});
+
+test('rejects short, non-matching and unknown words', () => {
+  const g = wordBombWith(3, 3); g.start();
+  assert.strictEqual(g.submit('p1', 'ab', g.roundStart + 400).ok, false);
+  const other = [...WORD_SET].find((x) => x.length >= 3 && x.length <= 12 && !x.includes(g.bigram));
+  assert.ok(other, 'need an off-bigram word');
+  const miss = g.submit('p1', other, g.roundStart + 400);
+  assert.strictEqual(miss.ok, false);
+  assert.match(miss.error, /must contain/i);
+  assert.strictEqual(g.submit('p1', 'zzzzzz', g.roundStart + 400).ok, false);
+});
+
+test('speed bonus rewards earlier words and updates standings', () => {
+  const g = wordBombWith(3, 3); g.start();
+  g.submit('p1', freshWord(g), g.roundStart + 1000);
+  const results = g.reveal();
+  const p1 = results.find((r) => r.id === 'p1');
+  assert.ok(p1.valid);
+  assert.ok(p1.gain >= 150 && p1.gain <= 200, 'gain was ' + p1.gain);
+  assert.strictEqual(g.standings()[0].id, 'p1');
+});
+
+test('serialize hides submitted words until the reveal', () => {
+  const g = wordBombWith(3, 3); g.start();
+  const w = freshWord(g);
+  g.submit('p1', w, g.roundStart + 800);
+  const live = g.serialize('p2');
+  assert.strictEqual(live.players.find((p) => p.id === 'p1').word, null);
+  assert.strictEqual(live.youSubmitted, false);
+  assert.strictEqual(g.serialize('p1').youSubmitted, true);
+  g.reveal();
+  const shown = g.serialize('p2');
+  assert.strictEqual(shown.players.find((p) => p.id === 'p1').word, w);
+  assert.strictEqual(shown.reveal.bigram, g.bigram);
+});
+
+test('plays the configured number of rounds and crowns a winner', () => {
+  const g = wordBombWith(3, 3); g.start();
+  for (let i = 0; i < 3; i++) {
+    g.submit('p1', freshWord(g), g.roundStart + 600);
+    g.reveal();
+    const next = g.advanceAfterReveal();
+    assert.strictEqual(next, i < 2 ? 'round' : 'final');
+  }
+  assert.strictEqual(g.phase, 'final');
+  assert.strictEqual(g.serialize('p1').winner.id, 'p1');
+});
+
+// ---------------- Ink Rush ----------------
+function inkRushWith(n, rounds) {
+  const g = new InkRush({ rounds });
+  for (let i = 1; i <= n; i++) g.addPlayer('p' + i, 'P' + i);
+  return g;
+}
+
+console.log('\n=== Ink Rush ===');
+
+test('starts a prompt with a name and an ink colour', () => {
+  const g = inkRushWith(3, 3);
+  assert.ok(g.start().ok);
+  assert.strictEqual(g.phase, 'prompt');
+  assert.ok(g.prompt.ink >= 0 && g.prompt.ink < 4);
+  assert.ok(typeof g.prompt.word === 'string' && g.prompt.word.length > 1);
+});
+
+test('rejects scripted-fast answers and duplicate answers', () => {
+  const g = inkRushWith(3, 3); g.start();
+  assert.strictEqual(g.answer('p1', g.prompt.ink, g.roundStart + 100).ok, false);
+  assert.ok(g.answer('p1', g.prompt.ink, g.roundStart + 1200).ok);
+  assert.strictEqual(g.answer('p1', g.prompt.ink, g.roundStart + 1300).ok, false);
+});
+
+test('correct ink scores by speed, wrong ink scores nothing', () => {
+  const g = inkRushWith(3, 3); g.start();
+  const ink = g.prompt.ink;
+  g.answer('p1', ink, g.roundStart + 2000);
+  g.answer('p2', (ink + 1) % 4, g.roundStart + 1000);
+  const results = g.reveal();
+  const p1 = results.find((r) => r.id === 'p1');
+  const p2 = results.find((r) => r.id === 'p2');
+  assert.ok(p1.correct);
+  assert.ok(p1.gain >= 220 && p1.gain <= 280, 'gain was ' + p1.gain);
+  assert.strictEqual(p2.correct, false);
+  assert.strictEqual(p2.gain, 0);
+});
+
+test('serialize hides correctness until the reveal', () => {
+  const g = inkRushWith(3, 3); g.start();
+  g.answer('p1', g.prompt.ink, g.roundStart + 900);
+  assert.strictEqual(g.serialize('p1').players.find((p) => p.id === 'p1').correct, null);
+  g.reveal();
+  const s = g.serialize('p1');
+  assert.strictEqual(s.players.find((p) => p.id === 'p1').correct, true);
+  assert.strictEqual(s.reveal.ink, g.prompt.ink);
+});
+
+test('plays the configured number of prompts and crowns a winner', () => {
+  const g = inkRushWith(3, 3); g.start();
+  for (let i = 0; i < 3; i++) {
+    g.answer('p1', g.prompt.ink, g.roundStart + 1200);
+    g.reveal();
+    const next = g.advanceAfterReveal();
+    assert.strictEqual(next, i < 2 ? 'prompt' : 'final');
+  }
+  assert.strictEqual(g.phase, 'final');
+  assert.strictEqual(g.serialize('p1').winner.id, 'p1');
+});
+
+// ---------------- Derby ----------------
+console.log('\n=== The Derby ===');
+
+test('opens at 25% implied odds per horse with no money down', () => {
+  const d = new Derby();
+  assert.strictEqual(d.phase, 'betting');
+  const odds = d.odds();
+  for (const id of ['nightfall', 'ember', 'sage', 'gilded']) {
+    assert.strictEqual(odds[id].probability, 0.25);
+    assert.strictEqual(odds[id].multiplier, null);
+  }
+});
+
+test('pari-mutuel odds move with the crowd', () => {
+  const d = new Derby();
+  assert.ok(d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 100 }).ok);
+  assert.ok(d.placeBet({ userId: 'b', username: 'B', horseId: 'nightfall', amount: 100 }).ok);
+  const odds = d.odds();
+  assert.strictEqual(d.pools().total, 200);
+  assert.strictEqual(odds.ember.probability, 0.5);
+  assert.strictEqual(odds.ember.multiplier, 2);
+  assert.ok(d.placeBet({ userId: 'c', username: 'C', horseId: 'ember', amount: 200 }).ok);
+  assert.strictEqual(d.odds().ember.probability, 0.75);
+});
+
+test('rejects bad stakes, unknown horses, and late bets', () => {
+  const d = new Derby();
+  assert.strictEqual(d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 5 }).ok, false);
+  assert.strictEqual(d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 5001 }).ok, false);
+  assert.strictEqual(d.placeBet({ userId: 'a', username: 'A', horseId: 'nope', amount: 100 }).ok, false);
+  d.startRace(Date.now(), 'ember');
+  assert.strictEqual(d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 100 }).ok, false);
+});
+
+test('races to completion and settles winners from the whole pool', () => {
+  const d = new Derby();
+  d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 100 });
+  d.placeBet({ userId: 'b', username: 'B', horseId: 'nightfall', amount: 100 });
+  d.placeBet({ userId: 'c', username: 'C', horseId: 'ember', amount: 300 });
+  const now = Date.now();
+  assert.strictEqual(d.startRace(now, 'ember'), 'ember');
+  assert.strictEqual(d.phase, 'racing');
+  assert.strictEqual(d.tick(now + 20000), true, 'every horse has finished');
+  assert.ok(d.horses.every((h) => h.progress === 1));
+
+  const result = d.settle();
+  assert.strictEqual(result.winnerId, 'ember');
+  assert.strictEqual(result.winningPool, 400);
+  assert.strictEqual(result.refunded, false);
+  const payouts = Object.fromEntries(result.payouts.map((p) => [p.userId, p.payout]));
+  assert.strictEqual(payouts.a, 125);
+  assert.strictEqual(payouts.c, 375);
+  assert.strictEqual(payouts.b, 0);
+  assert.strictEqual(result.payouts.reduce((sum, p) => sum + p.payout, 0), 500);
+});
+
+test('refunds every stake when nobody backed the winner', () => {
+  const d = new Derby();
+  d.placeBet({ userId: 'a', username: 'A', horseId: 'nightfall', amount: 80 });
+  d.placeBet({ userId: 'b', username: 'B', horseId: 'sage', amount: 20 });
+  d.startRace(Date.now(), 'ember');
+  const result = d.settle();
+  assert.strictEqual(result.refunded, true);
+  assert.ok(result.payouts.every((p) => p.refund && p.payout === p.stake));
+});
+
+test('serialize exposes only the requesting user’s result and bets', () => {
+  const d = new Derby();
+  d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 60 });
+  d.placeBet({ userId: 'b', username: 'B', horseId: 'ember', amount: 40 });
+  d.startRace(Date.now(), 'ember');
+  d.settle();
+  const a = d.serialize('a');
+  assert.strictEqual(a.result.payouts.length, 1);
+  assert.strictEqual(a.result.payouts[0].userId, 'a');
+  assert.strictEqual(a.result.payouts[0].payout, 60);
+  assert.deepStrictEqual(a.yourBets, [{ horseId: 'ember', amount: 60 }]);
 });
 
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===\n`);

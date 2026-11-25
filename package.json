@@ -1,13 +1,15 @@
 {
-  "name": "barricade-and-infinite-ttt",
-  "version": "1.0.0",
-  "description": "Barricade (Quoridor) + Infinite Tic Tac Toe with PvP and PvE, Node.js + Socket.io + Docker",
+  "name": "the-arcade",
+  "version": "2.0.0",
+  "description": "Eleven-game arcade: solo, two-player, party games and a live pari-mutuel derby. Node.js + Socket.io + MongoDB.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
     "test": "node test/run-tests.js",
-    "test:e2e": "node test/e2e.js"
+    "test:e2e": "node test/e2e.js",
+    "test:e2e:live": "node test/e2e-live.js",
+    "test:load": "node test/load-60.js"
   },
   "dependencies": {
     "express": "^4.22.2",

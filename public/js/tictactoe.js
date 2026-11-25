@@ -1,6 +1,6 @@
 // public/js/tictactoe.js — client renderer for Infinite Tic Tac Toe.
 (function () {
-  const SYM = { 1: '✕', 2: '◯' };
+  const SYM = { 1: 'X', 2: 'O' };
 
   function render(wrap, state, ctx) {
     wrap.innerHTML = '';
@@ -28,7 +28,7 @@
 
   function statusText(state, seat, mode) {
     if (state.winner) {
-      return state.winner === seat ? 'You win! 🎉'
+      return state.winner === seat ? 'You win.'
         : (mode === 'pve' ? 'Computer wins.' : 'Opponent wins.');
     }
     const you = `You are ${SYM[seat]}`;
