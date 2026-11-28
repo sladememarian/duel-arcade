@@ -36,6 +36,8 @@ class Derby {
     this.phase = 'betting'; // betting | racing | results
     this.phaseEndsAt = null;
     this.bets = [];         // { userId, username, horseId, amount }
+    this.betsByUser = new Map();
+    this.payoutsByUser = new Map();
     this.horses = HORSES.map((h) => ({ ...h, progress: 0, finishMs: 0 }));
     this.winnerId = null;
     this.startedAt = 0;
@@ -78,24 +80,26 @@ class Derby {
     const amt = Math.floor(Number(amount));
     if (!Number.isFinite(amt) || amt < BET_MIN) return { ok: false, error: `Minimum bet is ${BET_MIN} points.` };
     if (amt > BET_MAX) return { ok: false, error: `Maximum bet is ${BET_MAX} points.` };
-    this.bets.push({
+    const bet = {
       userId: String(userId),
       username: String(username || 'Player').slice(0, 16),
       horseId,
       amount: amt,
-    });
+    };
+    this.bets.push(bet);
+    let mine = this.betsByUser.get(bet.userId);
+    if (!mine) { mine = []; this.betsByUser.set(bet.userId, mine); }
+    mine.push(bet);
     return { ok: true, amount: amt, horseId };
   }
 
   totalForUser(userId) {
-    return this.bets
-      .filter((b) => b.userId === String(userId))
+    return (this.betsByUser.get(String(userId)) || [])
       .reduce((sum, b) => sum + b.amount, 0);
   }
 
   betsForUser(userId) {
-    return this.bets
-      .filter((b) => b.userId === String(userId))
+    return (this.betsByUser.get(String(userId)) || [])
       .map((b) => ({ horseId: b.horseId, amount: b.amount }));
   }
 
@@ -164,10 +168,19 @@ class Derby {
       payouts,
       refunded: winningPool === 0,
     };
+    this.payoutsByUser = new Map();
+    for (const p of payouts) {
+      const key = String(p.userId);
+      let mine = this.payoutsByUser.get(key);
+      if (!mine) { mine = []; this.payoutsByUser.set(key, mine); }
+      mine.push(p);
+    }
     return this.result;
   }
 
-  serialize(forUserId) {
+  // Shared state for all clients. Computing this once per broadcast avoids
+  // rebuilding horses/pools/odds and filtering bets once per socket.
+  baseState() {
     const odds = this.phase === 'racing' && this.snapshot
       ? this.snapshot.odds
       : this.odds();
@@ -192,9 +205,19 @@ class Derby {
       result: this.phase === 'results' ? {
         winnerId: this.result.winnerId,
         winnerName: this.result.winnerName,
-        payouts: this.result.payouts.filter((p) => p.userId === String(forUserId)),
         refunded: this.result.refunded,
       } : null,
+    };
+  }
+
+  serialize(forUserId, base = null) {
+    const state = base || this.baseState();
+    const personal = state.result
+      ? (this.payoutsByUser.get(String(forUserId)) || []).map((p) => ({ ...p }))
+      : null;
+    return {
+      ...state,
+      result: state.result ? { ...state.result, payouts: personal } : null,
       yourBets: this.betsForUser(forUserId),
     };
   }

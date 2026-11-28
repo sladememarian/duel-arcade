@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const os = require('os');
+const { monitorEventLoopDelay } = require('perf_hooks');
 
 // Minimal .env loader (no dependency). Populates process.env from ./.env if present.
 try {
@@ -36,13 +37,19 @@ const auth = require('./auth');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  maxHttpBufferSize: 64 * 1024,
-  perMessageDeflate: false, // small, frequent messages — compression costs CPU
+  maxHttpBufferSize: 32 * 1024,
+  perMessageDeflate: false, // small, frequent messages �?? compression costs CPU
   pingInterval: 25000,
   pingTimeout: 20000,
 });
 
+// Event-loop delay is the metric that explains stalls when CPU is not pegged.
+const eventLoopMonitor = monitorEventLoopDelay({ resolution: 10 });
+eventLoopMonitor.enable();
+
 app.disable('x-powered-by');
+// boxd terminates TLS and forwards one proxy hop. Keep this in sync with the
+// deployment so req.ip is the real client IP for rate limits.
 app.set('trust proxy', 1);
 
 // ---- security headers (no external helmet dependency) ----
@@ -98,8 +105,17 @@ const MAX_USERS = Math.max(1, parseInt(process.env.MAX_USERS, 10) || 60);
 const COOKIE_SECURE = String(process.env.COOKIE_SECURE || 'false') === 'true';
 
 // ---------------- rate limiting ----------------
-const registerLimiter = new auth.RateLimiter({ windowMs: 10 * 60 * 1000, max: 5, name: 'register' });
-const loginLimiter = new auth.RateLimiter({ windowMs: 10 * 60 * 1000, max: 25, name: 'login' });
+// A class/room often shares one public IP. Per-IP limits must fit the account
+// cap, while a tighter per-IP+username limit still protects one account.
+const registerLimiter = new auth.RateLimiter({
+  windowMs: 10 * 60 * 1000, max: Math.max(5, MAX_USERS), name: 'register',
+});
+const loginIpLimiter = new auth.RateLimiter({
+  windowMs: 10 * 60 * 1000, max: Math.max(60, MAX_USERS * 2), name: 'login-ip',
+});
+const loginUserLimiter = new auth.RateLimiter({
+  windowMs: 10 * 60 * 1000, max: 10, name: 'login-user',
+});
 const loginGuard = new auth.LoginGuard({ max: 8, windowMs: 15 * 60 * 1000 });
 
 // A dummy credential so failed logins for unknown usernames still pay the scrypt cost.
@@ -182,6 +198,13 @@ app.post('/api/score', wrap(async (req, res) => {
 
 // Solo completion — this is where offline points are credited.
 const soloCooldown = new Map();
+const soloCooldownTimer = setInterval(() => {
+  const cutoff = Date.now() - 45_000;
+  for (const [key, at] of soloCooldown) {
+    if (at <= cutoff) soloCooldown.delete(key);
+  }
+}, 5 * 60 * 1000);
+soloCooldownTimer.unref();
 
 app.post('/api/solo/complete', wrap(async (req, res) => {
   const user = await reqUser(req);
@@ -245,12 +268,14 @@ app.post('/api/auth/register', wrap(async (req, res) => {
 }));
 
 app.post('/api/auth/login', wrap(async (req, res) => {
-  const rl = loginLimiter.hit(req.ip);
-  if (!rl.allowed) return res.status(429).json({ ok: false, error: `Too many attempts. Try again in ${rl.retryAfter}s.` });
-  if (!db.isOnline()) return res.status(503).json({ ok: false, error: 'Accounts are temporarily unavailable.' });
-
   const rawUsername = String((req.body && req.body.username) || '').trim().toLowerCase();
   const password = String((req.body && req.body.password) || '');
+  const ipRl = loginIpLimiter.hit(req.ip);
+  if (!ipRl.allowed) return res.status(429).json({ ok: false, error: `Too many attempts. Try again in ${ipRl.retryAfter}s.` });
+  const userRl = loginUserLimiter.hit(`${req.ip}|${rawUsername}`);
+  if (!userRl.allowed) return res.status(429).json({ ok: false, error: `Too many attempts. Try again in ${userRl.retryAfter}s.` });
+  if (!db.isOnline()) return res.status(503).json({ ok: false, error: 'Accounts are temporarily unavailable.' });
+
   const guard = loginGuard.isLocked(rawUsername);
   if (guard.locked) {
     return res.status(429).json({ ok: false, error: `Too many failed attempts. Try again in ${guard.retryAfter}s.` });
@@ -282,6 +307,17 @@ app.post('/api/auth/logout', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
+function eventLoopLag() {
+  const ms = (ns) => Math.round(ns / 100000) / 10;
+  return {
+    resolutionMs: 10,
+    p50Ms: ms(eventLoopMonitor.percentile(50)),
+    p95Ms: ms(eventLoopMonitor.percentile(95)),
+    p99Ms: ms(eventLoopMonitor.percentile(99)),
+    maxMs: ms(eventLoopMonitor.max),
+  };
+}
+
 app.get('/healthz', (_req, res) => {
   const mem = process.memoryUsage();
   res.json({
@@ -289,6 +325,7 @@ app.get('/healthz', (_req, res) => {
     db: db.status,
     uptimeSeconds: Math.round(process.uptime()),
     memory: { rssMB: Math.round(mem.rss / 1048576), heapMB: Math.round(mem.heapUsed / 1048576) },
+    eventLoop: eventLoopLag(),
     load1: os.loadavg ? Number(os.loadavg()[0].toFixed(2)) : 0,
     rooms: Object.keys(rooms).length,
     sockets: io.engine.clientsCount,
@@ -312,6 +349,28 @@ app.use((err, _req, res, next) => {
 // Party rooms (island/trivia/wordbomb/inkrush):
 //   { game, engine, timer, botTimers:[], phaseEndsAt, botSeq, users:{}, mode, awardMode, awarded }
 const rooms = {};
+const socketsByUser = new Map();
+
+function trackUserSocket(socket) {
+  const id = socket.data.user && socket.data.user.id;
+  if (!id) return;
+  let set = socketsByUser.get(String(id));
+  if (!set) { set = new Set(); socketsByUser.set(String(id), set); }
+  set.add(socket);
+}
+
+function untrackUserSocket(socket) {
+  const id = socket.data.user && socket.data.user.id;
+  if (!id) return;
+  const set = socketsByUser.get(String(id));
+  if (!set) return;
+  set.delete(socket);
+  if (!set.size) socketsByUser.delete(String(id));
+}
+
+function userSockets(userId) {
+  return socketsByUser.get(String(userId)) || [];
+}
 
 function makeCode() {
   let c;
@@ -383,11 +442,9 @@ async function awardRanked(code, game, mode, rankedIds) {
     let balance = user.points || 0;
     if (pts > 0) balance = await db.addPoints(user.id, pts, { game, mode, place });
     await db.recordMatch(user.id, { game, mode, place, points: pts });
-    for (const s of io.sockets.sockets.values()) {
-      if (s.data.user && s.data.user.id === user.id) {
-        s.data.user.points = balance;
-        s.emit('pointsAwarded', { game, mode, place, points: pts, balance });
-      }
+    for (const s of userSockets(user.id)) {
+      s.data.user.points = balance;
+      s.emit('pointsAwarded', { game, mode, place, points: pts, balance });
     }
   }
 }
@@ -805,11 +862,25 @@ const derby = new Derby();
 let derbyTimer = null;
 let derbyTick = null;
 let derbyResultsTimer = null;
+let derbyBroadcastTimer = null;
 
-function derbyBroadcast() {
+function derbyBroadcastNow() {
+  if (derbyBroadcastTimer) { clearTimeout(derbyBroadcastTimer); derbyBroadcastTimer = null; }
+  const base = derby.baseState();
   for (const s of io.sockets.sockets.values()) {
-    s.emit('derbyState', derby.serialize(s.data.user ? s.data.user.id : s.id));
+    s.emit('derbyState', derby.serialize(s.data.user ? s.data.user.id : s.id, base));
   }
+}
+
+// Wagers arrive in bursts; one broadcast per tick is enough. Phase changes use
+// derbyBroadcastNow() so start/results are never delayed.
+function derbyBroadcastSoon() {
+  if (derbyBroadcastTimer) return;
+  derbyBroadcastTimer = setTimeout(() => {
+    derbyBroadcastTimer = null;
+    derbyBroadcastNow();
+  }, 250);
+  if (derbyBroadcastTimer.unref) derbyBroadcastTimer.unref();
 }
 
 function startDerbyBetting() {
@@ -818,18 +889,18 @@ function startDerbyBetting() {
   clearInterval(derbyTick); derbyTick = null;
   derby.reset();
   derby.phaseEndsAt = Date.now() + BETTING_MS;
-  derbyBroadcast();
+  derbyBroadcastNow();
   derbyTimer = setTimeout(startDerbyRace, BETTING_MS);
 }
 
 function startDerbyRace() {
   derby.startRace(Date.now());
   derby.phaseEndsAt = null;
-  derbyBroadcast();
+  derbyBroadcastNow();
   clearInterval(derbyTick);
   derbyTick = setInterval(() => {
     const done = derby.tick(Date.now());
-    derbyBroadcast();
+    derbyBroadcastNow();
     if (done) {
       clearInterval(derbyTick); derbyTick = null;
       finishDerby();
@@ -840,7 +911,7 @@ function startDerbyRace() {
 async function finishDerby() {
   const result = derby.settle();
   derby.phaseEndsAt = Date.now() + RESULTS_MS;
-  derbyBroadcast();
+  derbyBroadcastNow();
 
   if (db.isOnline()) {
     for (const p of result.payouts) {
@@ -848,11 +919,9 @@ async function finishDerby() {
         const balance = await db.addPoints(p.userId, p.payout, {
           game: 'derby', raceId: derby.raceId, horseId: p.horseId, refund: !!p.refund,
         });
-        for (const s of io.sockets.sockets.values()) {
-          if (s.data.user && s.data.user.id === p.userId) {
-            s.data.user.points = balance;
-            s.emit('pointsAwarded', { game: 'derby', points: p.payout, balance, derby: true });
-          }
+        for (const s of userSockets(p.userId)) {
+          s.data.user.points = balance;
+          s.emit('pointsAwarded', { game: 'derby', points: p.payout, balance, derby: true });
         }
       }
     }
@@ -1052,20 +1121,29 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   socket.data.room = null;
   socket.data.seat = null;
+  trackUserSocket(socket);
 
-  // Light per-socket flood guard.
+  // Per-socket flood guard. Real clients send a few intents per second; 60 in
+  // 2 s leaves headroom for reconnect/UI bursts without allowing spam.
   let bucket = 0;
   let bucketAt = Date.now();
+  let warned = false;
   socket.use((_packet, next) => {
     const now = Date.now();
-    if (now - bucketAt > 2000) { bucketAt = now; bucket = 0; }
+    if (now - bucketAt > 2000) { bucketAt = now; bucket = 0; warned = false; }
     bucket += 1;
-    if (bucket > 80) return; // drop silently
+    if (bucket > 60) {
+      if (!warned) {
+        warned = true;
+        socket.emit('errorMsg', 'Too many actions. Slow down.');
+      }
+      return; // drop this packet
+    }
     next();
   });
 
   if (socket.data.user) socket.emit('you', { user: socket.data.user });
-  socket.emit('derbyState', derby.serialize(socket.data.user ? socket.data.user.id : socket.id));
+  socket.emit('derbyState', derby.serialize(socket.data.user ? socket.data.user.id : socket.id, derby.baseState()));
 
   // ---- two-player: create vs computer ----
   socket.on('createPvE', ({ game, difficulty }) => {
@@ -1539,7 +1617,7 @@ io.on('connection', (socket) => {
     socket.data.user.points = balance;
     socket.emit('pointsAwarded', { game: 'derby', points: -amt, balance });
     db.saveBet({ raceId: derby.raceId, userId: user.id, username: user.username, horseId: horse, amount: amt });
-    derbyBroadcast();
+    derbyBroadcastSoon();
   });
 
   // ================= MATCHMAKING =================
@@ -1563,7 +1641,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('leaveRoom', () => cleanup(socket));
-  socket.on('disconnect', () => { mmRemove(socket.id); cleanup(socket); });
+  socket.on('disconnect', () => { untrackUserSocket(socket); mmRemove(socket.id); cleanup(socket); });
 });
 
 // ===================================================================

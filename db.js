@@ -10,6 +10,8 @@ const { MongoClient } = require('mongodb');
 const MONGO_URL = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017';
 const DB_NAME = process.env.MONGO_DB || 'arcade';
 const RETRY_MS = parseInt(process.env.DB_RETRY_MS, 10) || 20000;
+const DATA_TTL_DAYS = Math.max(1, parseInt(process.env.DATA_TTL_DAYS, 10) || 90);
+const DATA_TTL_SECONDS = DATA_TTL_DAYS * 24 * 60 * 60;
 
 let client = null;
 let db = null;
@@ -53,6 +55,9 @@ async function connectOnce() {
       sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
       scores.createIndex({ game: 1, score: -1 }),
       pointEvents.createIndex({ userId: 1, at: -1 }),
+      pointEvents.createIndex({ at: 1 }, { expireAfterSeconds: DATA_TTL_SECONDS }),
+      races.createIndex({ at: 1 }, { expireAfterSeconds: DATA_TTL_SECONDS }),
+      bets.createIndex({ at: 1 }, { expireAfterSeconds: DATA_TTL_SECONDS }),
     ]);
 
     status = 'online';

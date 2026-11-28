@@ -1,5 +1,8 @@
 # Server Requirements & Capacity Report — The Arcade
 
+> **2026-11-27:** New public load tests supersede this baseline. See `LOAD_TEST_REPORT.md` for
+> current measurements, the 60/100/200-player results, and SQLite/concurrency recommendations.
+
 This report covers the infrastructure needed to run the arcade smoothly for its intended
 scale: **up to 60 registered players**, several concurrent rooms, and the Derby broadcasting
 at 2.5 Hz. It is based on the measured 60-player run described in `README.md` and the
