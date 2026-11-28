@@ -12,3 +12,4 @@ pidstat-*.log
 vmstat-*.log
 soak-game-*.json
 soak-game-*.log
+soak-postfix-*
