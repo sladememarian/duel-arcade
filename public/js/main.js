@@ -5,6 +5,45 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+  // ---------------- theme ----------------
+  const THEMES = ['default', 'midnight', 'dark'];
+  const THEME_LABELS = { default: 'Default', midnight: 'Midnight', dark: 'Dark' };
+  const THEME_COLORS = { default: '#f2eee5', midnight: '#121a2f', dark: '#121210' };
+
+  function currentTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    return t === 'midnight' || t === 'dark' ? t : 'default';
+  }
+
+  function applyTheme(theme, persist) {
+    const t = THEMES.includes(theme) ? theme : 'default';
+    if (t === 'default') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', t);
+    const dark = t !== 'default';
+    document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+
+    const meta = $('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_COLORS[t]);
+    const scheme = $('meta[name="color-scheme"]');
+    if (scheme) scheme.setAttribute('content', dark ? 'dark' : 'light');
+
+    const btn = $('#theme-toggle');
+    if (btn) {
+      btn.title = `Theme: ${THEME_LABELS[t]} (click to change)`;
+      btn.setAttribute('aria-label', `Change theme; current theme: ${THEME_LABELS[t]}`);
+    }
+    if (persist) {
+      try { localStorage.setItem('arcade-theme', t); } catch (_) { /* storage unavailable */ }
+    }
+  }
+
+  function cycleTheme() {
+    const next = THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length];
+    applyTheme(next, true);
+  }
+
+  applyTheme(currentTheme(), false);
+
   const state = {
     user: null,
     prizes: null,
@@ -415,6 +454,10 @@
   $('#overlay-rematch').addEventListener('click', () => { socket.emit('rematch'); $('#overlay').classList.add('hidden'); state.awardText = ''; });
   $('#rematch').addEventListener('click', () => { socket.emit('rematch'); state.awardText = ''; });
   $('#overlay-menu').addEventListener('click', () => { socket.emit('leaveRoom'); resetBoard(); show('menu'); });
+
+  // ---------------- theme toggle ----------------
+  const themeBtn = $('#theme-toggle');
+  if (themeBtn) themeBtn.addEventListener('click', cycleTheme);
 
   // ---------------- nav ----------------
   $$('[data-nav]').forEach((b) => {

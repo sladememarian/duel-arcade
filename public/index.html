@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="light" />
   <meta name="theme-color" content="#f2eee5" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('arcade-theme');
+        if (t === 'midnight' || t === 'dark') {
+          document.documentElement.setAttribute('data-theme', t);
+          document.documentElement.style.colorScheme = 'dark';
+          var themeMeta = document.querySelector('meta[name="theme-color"]');
+          if (themeMeta) themeMeta.setAttribute('content', t === 'midnight' ? '#121a2f' : '#121210');
+        }
+      } catch (_) { /* storage unavailable */ }
+    })();
+  </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23161512'/%3E%3Cpath d='M10 8v16M22 8v16M8 10h16M8 22h16' stroke='%23f2eee5' stroke-width='1.6'/%3E%3C/svg%3E" />
   <title>The Arcade — eleven games, one ledger</title>
   <link rel="stylesheet" href="style.css" />
@@ -83,6 +96,12 @@
         </nav>
 
         <div class="account">
+          <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Change theme" title="Theme: Default">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="7.5"></circle>
+              <path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor" stroke="none"></path>
+            </svg>
+          </button>
           <div class="account-chip" title="Signed in">
             <span id="account-initial" class="account-initial">A</span>
             <span class="account-copy">
