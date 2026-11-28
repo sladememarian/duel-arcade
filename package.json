@@ -9,6 +9,7 @@
     "test": "node test/run-tests.js",
     "test:e2e": "node test/e2e.js",
     "test:e2e:live": "node test/e2e-live.js",
+    "test:scenarios": "node test/scenarios-public.js",
     "test:load": "node test/load-60.js"
   },
   "dependencies": {

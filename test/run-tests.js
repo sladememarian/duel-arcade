@@ -755,6 +755,67 @@ test('serialize exposes only the requesting user’s result and bets', () => {
   assert.strictEqual(a.result.payouts[0].userId, 'a');
   assert.strictEqual(a.result.payouts[0].payout, 60);
   assert.deepStrictEqual(a.yourBets, [{ horseId: 'ember', amount: 60 }]);
+
+  const b = d.serialize('b');
+  assert.strictEqual(b.result.payouts.length, 1);
+  assert.strictEqual(b.result.payouts[0].userId, 'b');
+  assert.strictEqual(b.result.payouts[0].payout, 40);
+  assert.deepStrictEqual(b.yourBets, [{ horseId: 'ember', amount: 40 }]);
+
+  const unknown = d.serialize('nobody');
+  assert.deepStrictEqual(unknown.result.payouts, []);
+  assert.deepStrictEqual(unknown.yourBets, []);
+});
+
+test('baseState omits private payouts and per-user bets', () => {
+  const d = new Derby();
+  d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 60 });
+  d.placeBet({ userId: 'b', username: 'B', horseId: 'nightfall', amount: 40 });
+  d.startRace(Date.now(), 'ember');
+  d.settle();
+  const base = d.baseState();
+  assert.strictEqual(base.result.winnerId, 'ember');
+  assert.strictEqual(base.result.payouts, undefined);
+  assert.strictEqual(base.yourBets, undefined);
+});
+
+test('payouts conserve the full pool after rounding', () => {
+  const d = new Derby();
+  d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 10 });
+  d.placeBet({ userId: 'b', username: 'B', horseId: 'ember', amount: 10 });
+  d.placeBet({ userId: 'c', username: 'C', horseId: 'ember', amount: 10 });
+  d.placeBet({ userId: 'd', username: 'D', horseId: 'nightfall', amount: 70 });
+  d.startRace(Date.now(), 'ember');
+  const result = d.settle();
+  assert.strictEqual(result.total, 100);
+  assert.strictEqual(result.winningPool, 30);
+  assert.strictEqual(result.payouts.reduce((sum, p) => sum + p.payout, 0), 100);
+  const payouts = Object.fromEntries(result.payouts.map((p) => [p.userId, p.payout]));
+  assert.deepStrictEqual(payouts, { a: 33, b: 33, c: 34, d: 0 });
+});
+
+test('refunds conserve every stake when nobody backs the winner', () => {
+  const d = new Derby();
+  d.placeBet({ userId: 'a', username: 'A', horseId: 'nightfall', amount: 30 });
+  d.placeBet({ userId: 'b', username: 'B', horseId: 'sage', amount: 70 });
+  d.startRace(Date.now(), 'ember');
+  const result = d.settle();
+  assert.strictEqual(result.refunded, true);
+  assert.strictEqual(result.payouts.reduce((sum, p) => sum + p.payout, 0), 100);
+  assert.ok(result.payouts.every((p) => p.refund && p.payout === p.stake));
+});
+
+test('reset clears per-user bet and payout maps', () => {
+  const d = new Derby();
+  d.placeBet({ userId: 'a', username: 'A', horseId: 'ember', amount: 50 });
+  d.startRace(Date.now(), 'ember');
+  d.settle();
+  assert.strictEqual(d.totalForUser('a'), 50);
+  d.reset();
+  assert.strictEqual(d.totalForUser('a'), 0);
+  assert.deepStrictEqual(d.betsForUser('a'), []);
+  assert.deepStrictEqual(d.serialize('a').yourBets, []);
+  assert.strictEqual(d.serialize('a').result, null);
 });
 
 console.log(`\n=== RESULT: ${passed} passed, ${failed} failed ===\n`);

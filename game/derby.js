@@ -151,9 +151,19 @@ class Derby {
         payouts.push({ userId: b.userId, username: b.username, horseId: b.horseId, stake: b.amount, payout: b.amount, refund: true });
       }
     } else {
+      // Round each ticket, then give the final winner the remainder. This keeps
+      // the ledger exact instead of leaking/creating points through rounding.
+      const payoutByBet = new Map();
+      let allocated = 0;
+      winners.forEach((b, i) => {
+        const payout = i === winners.length - 1
+          ? total - allocated
+          : Math.round((b.amount / winningPool) * total);
+        allocated += payout;
+        payoutByBet.set(b, payout);
+      });
       for (const b of this.bets) {
-        const won = b.horseId === this.winnerId;
-        const payout = won ? Math.round((b.amount / winningPool) * total) : 0;
+        const payout = b.horseId === this.winnerId ? payoutByBet.get(b) : 0;
         payouts.push({ userId: b.userId, username: b.username, horseId: b.horseId, stake: b.amount, payout, refund: false });
       }
     }

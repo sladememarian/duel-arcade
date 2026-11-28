@@ -1,9 +1,10 @@
 node_modules
 npm-debug.log
 .env
-load-users.json
+load-users*.json
 test/k6/load-users.json
 load-result*.json
+scenario-*.json
 test/k6/*-summary.json
 metrics-*.log
 mpstat-*.log
